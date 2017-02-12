@@ -1,0 +1,3 @@
+* Insert new nodes in-place, so that the string of characters inside a node
+  is taken sorted, and we can use binary search or just stop scanning
+  once a char greater than the one we are looking for is found.
