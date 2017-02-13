@@ -14,4 +14,11 @@ typedef struct trieNode {
     unsigned char data[];
 } trieNode;
 
+typedef struct trie {
+    trieNode *head;
+    uint64_t numele;
+} trie;
+
+extern void *trieNotFound;
+
 #endif
