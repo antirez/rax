@@ -2,11 +2,9 @@
 #include <string.h>
 #include "trie.h"
 
-#ifdef TEST_MAIN
-#include <stdio.h>
-
 void *trieNotFound = (void*)"trie-not-found-pointer";
 
+/* Allocate a new node. */
 trieNode *trieNewNode(void) {
     trieNode *node = malloc(sizeof(*node));
     node->iskey = 0;
@@ -14,6 +12,7 @@ trieNode *trieNewNode(void) {
     return node;
 }
 
+/* Allocate a new trie. */
 trie *trieNew(void) {
     trie *trie = malloc(sizeof(*trie));
     trie->numele = 0;
@@ -32,7 +31,6 @@ trieNode *trieReallocForData(trieNode *n) {
 
 /* Set the node auxiliary data to the specified pointer. */
 void trieSetData(trieNode *n, void *data) {
-    printf("set data: %p\n", (void*)n);
     void **ndata = (void**)(n->data+n->children+sizeof(trieNode*)*n->children);
     *ndata = data;
     n->iskey = 1;
@@ -75,8 +73,8 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
      *
      * [numc][abc].[ap][bp][cp]....|auxp| */
     if (n->iskey) {
-        memmove(n->data+newlen-sizeof(void*)*2,
-                n->data+newlen-sizeof(void*),
+        memmove(n->data+newlen-sizeof(trieNode)-sizeof(void*),
+                n->data+newlen-sizeof(trieNode)-sizeof(void*)*2,
                 sizeof(void*));
     }
 
@@ -167,7 +165,7 @@ void *trieFind(trie *trie, char *s, size_t len) {
         char *v = (char*)h->data;
         int j;
 
-        printf("[%p] children: %.*s\n", (void*)h, (int)h->children, v);
+//        printf("[%p] children: %.*s\n", (void*)h, (int)h->children, v);
         for (j = 0; j < h->children; j++) {
             if (v[j] == s[i]) break;
         }
@@ -177,16 +175,55 @@ void *trieFind(trie *trie, char *s, size_t len) {
         h = children[j];
         i++;
     }
-    printf("[%p] iskey?\n",(void*)h);
+    if (i != len) return trieNotFound;
+//    printf("[%p] iskey? %d\n",(void*)h,h->iskey);
     return h->iskey ? trieGetData(h) : trieNotFound;
+}
+
+#ifdef TEST_MAIN
+#include <stdio.h>
+#include <sys/time.h>
+
+/* Return the UNIX time in microseconds */
+long long ustime(void) {
+    struct timeval tv;
+    long long ust;
+
+    gettimeofday(&tv, NULL);
+    ust = ((long long)tv.tv_sec)*1000000;
+    ust += tv.tv_usec;
+    return ust;
 }
 
 int main(void) {
     trie *t = trieNew();
+    trieInsert(t,"abc",3,(void*)010);
     trieInsert(t,"mystring",8,(void*)0x1);
     trieInsert(t,"mystas",6,(void*)0x2);
+    trieInsert(t,"key:123",7,(void*)0x3);
+    trieInsert(t,"key:1234",8,(void*)0xff);
+
+    long long start = ustime();
+    for (int i = 0; i < 5000000; i++) {
+        char buf[64];
+        int len = snprintf(buf,sizeof(buf),"key:%d",i);
+        trieInsert(t,buf,len,(void*)(long)i);
+    }
+    printf("Insert: %f\n", (double)(ustime()-start)/1000000);
+
+    start = ustime();
+    for (int i = 0; i < 5000000; i++) {
+        char buf[64];
+        int len = snprintf(buf,sizeof(buf),"key:%d",i);
+        void *data = trieFind(t,buf,len);
+    }
+    printf("Lookup: %f\n", (double)(ustime()-start)/1000000);
+
     void *data1 = trieFind(t,"mystring",8);
     void *data2 = trieFind(t,"mystas",6);
+    void *data3 = trieFind(t,"myzack",6);
+    void *data4 = trieFind(t,"key:123",7);
+    printf("%p %p %p %p\n", data1, data2, data3, data4);
     return 0;
 }
 #endif
