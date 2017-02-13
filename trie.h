@@ -17,6 +17,7 @@ typedef struct trieNode {
 typedef struct trie {
     trieNode *head;
     uint64_t numele;
+    uint64_t numnodes;
 } trie;
 
 extern void *trieNotFound;

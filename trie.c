@@ -16,6 +16,7 @@ trieNode *trieNewNode(void) {
 trie *trieNew(void) {
     trie *trie = malloc(sizeof(*trie));
     trie->numele = 0;
+    trie->numnodes = 1;
     trie->head = trieNewNode();
     return trie;
 }
@@ -138,6 +139,7 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
      * chars in our string. We need to insert the missing nodes. */
     while(i < len) {
         trieNode *child;
+        trie->numnodes++;
         h = trieAddChild(h,s[i],&child);
         if (parentlink) {
             *parentlink = h;
@@ -206,7 +208,7 @@ int main(void) {
     long long start = ustime();
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
-        int len = snprintf(buf,sizeof(buf),"key:%d",i);
+        int len = snprintf(buf,sizeof(buf),"%04xkey:%d",i%16384,i);
         trieInsert(t,buf,len,(void*)(long)i);
     }
     printf("Insert: %f\n", (double)(ustime()-start)/1000000);
@@ -214,8 +216,11 @@ int main(void) {
     start = ustime();
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
-        int len = snprintf(buf,sizeof(buf),"key:%d",i);
+        int len = snprintf(buf,sizeof(buf),"%04xkey:%d",i%16384,i);
         void *data = trieFind(t,buf,len);
+        if (data != (void*)(long)i) {
+            printf("Issue with %s\n", buf);
+        }
     }
     printf("Lookup: %f\n", (double)(ustime()-start)/1000000);
 
@@ -224,6 +229,7 @@ int main(void) {
     void *data3 = trieFind(t,"myzack",6);
     void *data4 = trieFind(t,"key:123",7);
     printf("%p %p %p %p\n", data1, data2, data3, data4);
+    printf("%llu total nodes\n", (unsigned long long)t->numnodes);
     return 0;
 }
 #endif
