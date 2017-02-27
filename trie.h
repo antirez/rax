@@ -3,14 +3,75 @@
 
 #include <stdint.h>
 
+/* Representation of a trie as implemented in this file, that contains
+ * the strings "foo", "foobar" and "footer" after the insertion of each
+ * word. When the node represents a key inside the trie, we write it
+ * between [], otherwise it is written between ().
+ *
+ * This is the vanilla representation:
+ *
+ *              (f) ""
+ *                \
+ *                (o) "f"
+ *                  \
+ *                  (o) "fo"
+ *                    \
+ *                  [t   b] "foo"
+ *                  /     \
+ *         "foot" (e)     (a) "foob"
+ *                /         \
+ *      "foote" (r)         (r) "fooba"
+ *              /             \
+ *    "footer" []             [] "foobar"
+ *
+ * However, this implementation implements a very common optimization where
+ * successive nodes having a single child are "compressed" into the node
+ * itself as a string of characters, each representing a next-level child,
+ * and only the link to the node representing the last character node is
+ * provided inside the representation. So the above representation is turend
+ * into:
+ *
+ *                   [foo] ""
+ *                     |
+ *                  [t   b] "foo"
+ *                  /     \
+ *        "foot" ("er")    ("ar") "foob"
+ *                 /          \
+ *       "footer" []          [] "foobar"
+ */
+
+#define TRIE_NODE_MAX_SIZE ((1<<29)-1)
 typedef struct trieNode {
-    uint32_t iskey:1;
-    uint32_t children:31; /* Number of children, or string len if leaf. */
-    /* If it's a leaf, data layout is: leaf tail string + void ptr to store
-     * data associated with the key.
+    uint32_t iskey:1;     /* Does this node contains a key? */
+    uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
+    uint32_t iscompr:1;   /* Node is compressed. */
+    uint32_t size:29;     /* Number of children, or compressed string len. */
+    /* Data layout is as follows:
      *
-     * If it's an inner node data layout is: N bytes (one for each children)
-     * + N trieNode pointers. */
+     * If node is not compressed we have 'size' bytes, one for each children
+     * character, and 'size' trieNode pointers, point to each child node.
+     * Note how the character is not stored in the children but in the
+     * edge of the parents:
+     *
+     * [header strlen=0][abc][a-ptr][b-ptr][c-ptr](value-ptr?)
+     *
+     * if node is compressed (strlen != 0) the node has 1 children.
+     * In that case the 'size' bytes of the string stored immediately at
+     * the start of the data section, represent a sequence of successive
+     * nodes linked one after the other, for which only the last one in
+     * the sequence is actually represented and pointed to.
+     *
+     * [header strlen=3][xyz][z-ptr](value-ptr?)
+     *
+     * Both compressed and not compressed nodes can represent a key
+     * with associated data in the trie at any level (not just terminal
+     * nodes).
+     *
+     * If the node has an associated key (iskey=1) and is not NULL
+     * (isnull=0), then after the trieNode pointers poiting to the
+     * childen, an additional value pointer is present (as you can see
+     * in the representation above).
+     */
     unsigned char data[];
 } trieNode;
 
