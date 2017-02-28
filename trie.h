@@ -31,13 +31,36 @@
  * provided inside the representation. So the above representation is turend
  * into:
  *
- *                   [foo] ""
+ *                  ["foo"] ""
  *                     |
  *                  [t   b] "foo"
  *                  /     \
  *        "foot" ("er")    ("ar") "foob"
  *                 /          \
  *       "footer" []          [] "foobar"
+ *
+ * However this optimization makes the implementation a bit more complex.
+ * For instance if a key "first" is added in the above trie, a "node splitting"
+ * operation is needed, since the "foo" prefix is no longer composed of
+ * nodes having a single child one after the other. This is the above tree
+ * and the resulting node splitting after this event happens:
+ *
+ *
+ *                    (f) ""
+ *                    /
+ *                 (i o) "f"
+ *                 /   \
+ *    "firs"  ("rst")  (o) "fo"
+ *              /        \
+ *    "first" []       [t   b] "foo"
+ *                     /     \
+ *           "foot" ("er")    ("ar") "foob"
+ *                    /          \
+ *          "footer" []          [] "foobar"
+ *
+ * Similarly after deletion, if a new chain of nodes having a single child
+ * is created, it must be compressed back into a single node.
+ *
  */
 
 #define TRIE_NODE_MAX_SIZE ((1<<29)-1)
@@ -59,7 +82,8 @@ typedef struct trieNode {
      * In that case the 'size' bytes of the string stored immediately at
      * the start of the data section, represent a sequence of successive
      * nodes linked one after the other, for which only the last one in
-     * the sequence is actually represented and pointed to.
+     * the sequence is actually represented as a node, and pointed to by
+     * the current compressed node.
      *
      * [header strlen=3][xyz][z-ptr](value-ptr?)
      *
@@ -70,7 +94,7 @@ typedef struct trieNode {
      * If the node has an associated key (iskey=1) and is not NULL
      * (isnull=0), then after the trieNode pointers poiting to the
      * childen, an additional value pointer is present (as you can see
-     * in the representation above).
+     * in the representation above as "value-ptr" field).
      */
     unsigned char data[];
 } trieNode;

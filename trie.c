@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "trie.h"
 
 void *trieNotFound = (void*)"trie-not-found-pointer";
@@ -23,25 +24,40 @@ trie *trieNew(void) {
     return trie;
 }
 
+/* Return the current total size of the node. */
+size_t trieNodeCurrentLength(trieNode *n) {
+    size_t curlen = sizeof(trieNode)+
+                    n->size;
+    curlen += n->iscompr ? sizeof(trieNode*)*n->size :
+                           sizeof(trieNode*);
+    if (n->iskey && !n->isnull) curlen += sizeof(void*);
+    return curlen;
+}
+
 /* Realloc the node to make room for auxiliary data in order
  * to store an item in that node. */
-trieNode *trieReallocForData(trieNode *n) {
-    size_t curlen = sizeof(trieNode)+
-                    n->size+
-                    sizeof(trieNode*)*n->size;
+trieNode *trieReallocForData(trieNode *n, void *data) {
+    if (data == NULL) return n; /* No reallocation needed, setting isnull=1 */
+    size_t curlen = trieNodeCurrentLength(n);
     return realloc(n,curlen+sizeof(void*));
 }
 
 /* Set the node auxiliary data to the specified pointer. */
 void trieSetData(trieNode *n, void *data) {
-    void **ndata = (void**)(n->data+n->size+sizeof(trieNode*)*n->size);
-    *ndata = data;
+    if (data != NULL) {
+        void **ndata =(void**)((char*)n+trieNodeCurrentLength(n)-sizeof(void*));
+        *ndata = data;
+        n->isnull = 0;
+    } else {
+        n->isnull = 1;
+    }
     n->iskey = 1;
 }
 
 /* Get the node auxiliary data. */
 void *trieGetData(trieNode *n) {
-    void **ndata = (void**)(n->data+n->size+sizeof(trieNode*)*n->size);
+    if (n->isnull) return NULL;
+    void **ndata =(void**)((char*)n+trieNodeCurrentLength(n)-sizeof(void*));
     return *ndata;
 }
 
@@ -94,6 +110,40 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
     return n;
 }
 
+/* Turn the node 'n', that must be a node without any children, into a
+ * compressed node representing a set of nodes linked one after the other
+ * and having exactly one child each. The node can be a key or not: this
+ * property and the associated value if any will be preserved.
+ *
+ * The function also returns a child node, since the last node of the
+ * compressed chain cannot be part of the chain: it has zero children while
+ * we can only compress inner nodes with exactly one child each. */
+trieNode *trieCompressNode(trieNode *n, char *s, size_t len, trieNode **child){
+    assert(n->size == 0);
+    void *data;
+    size_t newsize, valuelen = 0;
+
+    newsize = sizeof(trieNode)+n->size+sizeof(trieNode*);
+    if (n->iskey) {
+        data = trieGetData(n); /* To restore it later. */
+        if (data != NULL) {
+            newsize += sizeof(void*);
+            valuelen = sizeof(void*);
+        }
+    }
+
+    n = realloc(n,newsize);
+    n->iscompr = 1;
+    n->size = len;
+    memcpy(n->data,s,len);
+    if (n->iskey) trieSetData(n,data);
+    trieNode **childfield = (trieNode**)
+                            ((char*)n + newsize - valuelen - sizeof(trieNode*));
+    *child = *childfield;
+    *childfield = *child;
+    return n;
+}
+
 /* Insert the element 's' of size 'len', setting as auxiliary data
  * the pointer 'data'. If the element is already present, the associated
  * data is updated, and 0 is returned, otherwise the element is inserted
@@ -127,7 +177,7 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
             trieSetData(h,data);
             return 0; /* Element already exists. */
         }
-        h = trieReallocForData(h);
+        h = trieReallocForData(h,data);
         if (parentlink) {
             *parentlink = h;
         } else {
@@ -142,7 +192,21 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
     while(i < len) {
         trieNode *child;
         trie->numnodes++;
-        h = trieAddChild(h,s[i],&child);
+
+        /* If this node is going to have a single child, and there
+         * are other characters, so that that would result in a chain
+         * of single-childed nodes, turn it into a compressed node. */
+        if (h->size == 0 && len-i > 1) {
+            size_t comprsize = len-i;
+            if (comprsize > TRIE_NODE_MAX_SIZE) comprsize = TRIE_NODE_MAX_SIZE;
+            h = trieCompressNode(h,s+i,comprsize,&child);
+            i += comprsize;
+        } else {
+            h = trieAddChild(h,s[i],&child);
+            i++;
+        }
+
+        /* Fix parent's reference now that we reallocated. */
         if (parentlink) {
             *parentlink = h;
         } else {
@@ -151,9 +215,8 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
         trieNode **children = (trieNode**)(h->data+h->size);
         parentlink = &children[h->size-1];
         h = child;
-        i++;
     }
-    h = trieReallocForData(h);
+    h = trieReallocForData(h,data);
     trieSetData(h,data);
     return 1; /* Element inserted. */
 }

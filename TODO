@@ -1,3 +1,6 @@
 * Insert new nodes in-place, so that the string of characters inside a node
   is taken sorted, and we can use binary search or just stop scanning
   once a char greater than the one we are looking for is found.
+* Allow the insertion of strings greater then 512 MB. We need to check that
+  the compressed node length is split when this size is reached and a new
+  linked node is created.
