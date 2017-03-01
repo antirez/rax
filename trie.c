@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #include "trie.h"
 
 void *trieNotFound = (void*)"trie-not-found-pointer";
@@ -26,10 +27,9 @@ trie *trieNew(void) {
 
 /* Return the current total size of the node. */
 size_t trieNodeCurrentLength(trieNode *n) {
-    size_t curlen = sizeof(trieNode)+
-                    n->size;
-    curlen += n->iscompr ? sizeof(trieNode*)*n->size :
-                           sizeof(trieNode*);
+    size_t curlen = sizeof(trieNode)+n->size;
+    curlen += n->iscompr ? sizeof(trieNode*) :
+                           sizeof(trieNode*)*n->size;
     if (n->iskey && !n->isnull) curlen += sizeof(void*);
     return curlen;
 }
@@ -44,6 +44,7 @@ trieNode *trieReallocForData(trieNode *n, void *data) {
 
 /* Set the node auxiliary data to the specified pointer. */
 void trieSetData(trieNode *n, void *data) {
+    n->iskey = 1;
     if (data != NULL) {
         void **ndata =(void**)((char*)n+trieNodeCurrentLength(n)-sizeof(void*));
         *ndata = data;
@@ -51,7 +52,6 @@ void trieSetData(trieNode *n, void *data) {
     } else {
         n->isnull = 1;
     }
-    n->iskey = 1;
 }
 
 /* Get the node auxiliary data. */
@@ -65,6 +65,7 @@ void *trieGetData(trieNode *n) {
  * 'c' and return its new pointer, as well as the child pointer
  * by reference. */
 trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
+    assert(n->iscompr == 0);
     size_t curlen = sizeof(trieNode)+
                     n->size+
                     sizeof(trieNode*)*n->size;
@@ -119,14 +120,16 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
  * compressed chain cannot be part of the chain: it has zero children while
  * we can only compress inner nodes with exactly one child each. */
 trieNode *trieCompressNode(trieNode *n, char *s, size_t len, trieNode **child){
-    assert(n->size == 0);
-    void *data;
+    assert(n->size == 0 && n->iscompr == 0);
+    void *data = NULL; /* Initialized only to avoid warnings. */
     size_t newsize, valuelen = 0;
 
-    newsize = sizeof(trieNode)+n->size+sizeof(trieNode*);
+    printf("Compress node: %.*s\n", (int)len,s);
+
+    newsize = sizeof(trieNode)+len+sizeof(trieNode*);
     if (n->iskey) {
         data = trieGetData(n); /* To restore it later. */
-        if (data != NULL) {
+        if (!n->isnull) {
             newsize += sizeof(void*);
             valuelen = sizeof(void*);
         }
@@ -139,7 +142,7 @@ trieNode *trieCompressNode(trieNode *n, char *s, size_t len, trieNode **child){
     if (n->iskey) trieSetData(n,data);
     trieNode **childfield = (trieNode**)
                             ((char*)n + newsize - valuelen - sizeof(trieNode*));
-    *child = *childfield;
+    *child = trieNewNode();
     *childfield = *child;
     return n;
 }
@@ -153,6 +156,7 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
     trieNode **parentlink = NULL;
     trieNode *h = trie->head;
 
+    printf("Insert %.*s\n", (int)len, s);
     while(h->size && i < len) {
         char *v = (char*)h->data;
         int j;
@@ -197,11 +201,13 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
          * are other characters, so that that would result in a chain
          * of single-childed nodes, turn it into a compressed node. */
         if (h->size == 0 && len-i > 1) {
+            printf("Inserting compressed node\n");
             size_t comprsize = len-i;
             if (comprsize > TRIE_NODE_MAX_SIZE) comprsize = TRIE_NODE_MAX_SIZE;
             h = trieCompressNode(h,s+i,comprsize,&child);
             i += comprsize;
         } else {
+            printf("Inserting normal node\n");
             h = trieAddChild(h,s[i],&child);
             i++;
         }
@@ -228,26 +234,40 @@ void *trieFind(trie *trie, char *s, size_t len) {
     size_t i = 0;
     trieNode *h = trie->head;
 
+    printf("Lookup: %.*s\n", (int)len, s);
     while(h->size && i < len) {
+        printf("Lookup iteration node %p\n", (void*)h);
         char *v = (char*)h->data;
         int j;
 
-//        printf("[%p] children: %.*s\n", (void*)h, (int)h->size, v);
-        for (j = 0; j < h->size; j++) {
-            if (v[j] == s[i]) break;
+        printf("[%p %s] children: %.*s\n", (void*)h, h->iscompr ? "compr" : "plain", (int)h->size, v);
+
+        if (h->iscompr) {
+            for (j = 0; j < h->size && i < len; j++, i++) {
+                if (v[j] != s[i]) break;
+                printf("%c != %c? \n", v[j], s[i]);
+            }
+            if (j != h->size) return trieNotFound;
+            printf("here %d %d\n", (int)i, (int)len);
+            j = 0; /* Our only child is at index 0 for compressed nodes. */
+        } else {
+            for (j = 0; j < h->size; j++) {
+                if (v[j] == s[i]) break;
+            }
+            if (j == h->size) return trieNotFound;
+            i++;
         }
-        if (j == h->size) return trieNotFound;
+        printf("select next child\n");
 
         trieNode **children = (trieNode**)(h->data+h->size);
         h = children[j];
-        i++;
     }
     if (i != len) return trieNotFound;
-//    printf("[%p] iskey? %d\n",(void*)h,h->iskey);
+    printf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
     return h->iskey ? trieGetData(h) : trieNotFound;
 }
 
-#ifdef TEST_MAIN
+#ifdef BENCHMARK_MAIN
 #include <stdio.h>
 #include <sys/time.h>
 
@@ -264,7 +284,7 @@ long long ustime(void) {
 
 int main(void) {
     trie *t = trieNew();
-    trieInsert(t,"abc",3,(void*)010);
+    trieInsert(t,"abc",3,(void*)10);
     trieInsert(t,"mystring",8,(void*)0x1);
     trieInsert(t,"mystas",6,(void*)0x2);
     trieInsert(t,"key:123",7,(void*)0x3);
@@ -318,5 +338,19 @@ int main(void) {
     printf("%p %p %p %p\n", data1, data2, data3, data4);
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);
     return 0;
+}
+#endif
+
+#ifdef TEST_MAIN
+#include <stdio.h>
+
+int main(void) {
+    printf("notfound = %p\n", trieNotFound);
+    trie *t = trieNew();
+    trieInsert(t,"a",1,(void*)1);
+    printf("a = %p\n", trieFind(t,"a",1));
+    trieInsert(t,"abc",3,(void*)2);
+    printf("a = %p\n", trieFind(t,"a",1));
+    printf("abc = %p\n", trieFind(t,"abc",3));
 }
 #endif
