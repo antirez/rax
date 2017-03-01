@@ -156,20 +156,28 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
     trieNode **parentlink = NULL;
     trieNode *h = trie->head;
 
-    printf("Insert %.*s\n", (int)len, s);
+    printf("### Insert %.*s\n", (int)len, s);
+    int j;
     while(h->size && i < len) {
         char *v = (char*)h->data;
-        int j;
 
-        for (j = 0; j < h->size; j++) {
-            if (v[j] == s[i]) break;
+        if (h->iscompr) {
+            for (j = 0; j < h->size && i < len; j++, i++) {
+                if (v[j] != s[i]) break;
+            }
+            if (j != h->size) break;
+        } else {
+            for (j = 0; j < h->size; j++) {
+                if (v[j] == s[i]) break;
+            }
+            if (j == h->size) break;
+            i++;
         }
-        if (j == h->size) break;
 
         trieNode **children = (trieNode**)(h->data+h->size);
+        if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
         h = children[j];
         parentlink = &children[j];
-        i++;
     }
 
     /* If i == len we walked following the whole string, so the
@@ -189,6 +197,15 @@ int trieInsert(trie *trie, char *s, size_t len, void *data) {
         }
         trieSetData(h,data);
         return 1; /* Element inserted. */
+    }
+
+    /* If the node we stopped at is a compressed node, we need to
+     * split it before to continue. */
+    if (h->iscompr) {
+        printf("Stopped at compressed node %.*s\n", h->size, h->data);
+        printf("Still to insert: %.*s\n", (int)(len-i), s+i);
+        printf("Splitting at %d: '%c'\n", j, ((char*)h->data)[j]);
+        exit(1);
     }
 
     /* We walked the trie as far as we could, but still there are left
@@ -234,7 +251,7 @@ void *trieFind(trie *trie, char *s, size_t len) {
     size_t i = 0;
     trieNode *h = trie->head;
 
-    printf("Lookup: %.*s\n", (int)len, s);
+    printf("### Lookup: %.*s\n", (int)len, s);
     while(h->size && i < len) {
         printf("Lookup iteration node %p\n", (void*)h);
         char *v = (char*)h->data;
@@ -349,8 +366,9 @@ int main(void) {
     trie *t = trieNew();
     trieInsert(t,"a",1,(void*)1);
     printf("a = %p\n", trieFind(t,"a",1));
-    trieInsert(t,"abc",3,(void*)2);
+    trieInsert(t,"annibale",8,(void*)2);
     printf("a = %p\n", trieFind(t,"a",1));
-    printf("abc = %p\n", trieFind(t,"abc",3));
+    printf("annibale = %p\n", trieFind(t,"annibale",8));
+    trieInsert(t,"annientare",10,(void*)3);
 }
 #endif
