@@ -2,7 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include "trie.h"
+#include "radixtree.h"
 
 void *trieNotFound = (void*)"trie-not-found-pointer";
 

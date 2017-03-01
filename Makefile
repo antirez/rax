@@ -1,10 +1,10 @@
 DEBUG=-g -ggdb
 OPT=-O2
 
-all: test-trie
+all: test-radixtree
 
-test-trie: trie.c trie.h
-	$(CC) $(DEBUG) $(OPT) -Wall -W --std=c99 -o test-trie trie.c -DTEST_MAIN -g -ggdb
+test-radixtree: radixtree.c radixtree.h
+	$(CC) $(DEBUG) $(OPT) -Wall -W --std=c99 -o test-radixtree radixtree.c -DTEST_MAIN -g -ggdb
 
 clean:
-	rm -f test-trie
+	rm -f test-radixtree
