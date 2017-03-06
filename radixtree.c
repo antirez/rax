@@ -327,6 +327,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             *cp = splitnode;
             *parentlink = trimmed;
             parentlink = cp; /* Set parentlink to splitnode parent. */
+            trie->numnodes++;
         }
 
         /* 4: Create the postfix node: what remains of the original
@@ -344,6 +345,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             memcpy(postfix->data,h->data+j+1,postfixlen);
             trieNode **cp = trieNodeLastChildPtr(postfix);
             *cp = next;
+            trie->numnodes++;
         } else {
             /* 4b: just use next as postfix node. */
             postfix = next;
