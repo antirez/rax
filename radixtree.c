@@ -1,8 +1,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <stdio.h>
 #include "radixtree.h"
+
+/* Turn debugging messages on/off. */
+#if 0
+#include <stdio.h>
+#define debugf(...)                                                            \
+    do {                                                                       \
+        printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
+        printf(__VA_ARGS__);                                                   \
+    } while (0);
+#else
+#define debugf(...)
+#endif
 
 void *trieNotFound = (void*)"trie-not-found-pointer";
 
@@ -134,7 +145,7 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
     void *data = NULL; /* Initialized only to avoid warnings. */
     size_t newsize;
 
-    printf("Compress node: %.*s\n", (int)len,s);
+    debugf("Compress node: %.*s\n", (int)len,s);
 
     newsize = sizeof(trieNode)+len+sizeof(trieNode*);
     if (n->iskey) {
@@ -162,7 +173,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
     trieNode **parentlink = &trie->head;
     trieNode *h = trie->head;
 
-    printf("### Insert %.*s with value %p\n", (int)len, s, data);
+    debugf("### Insert %.*s with value %p\n", (int)len, s, data);
     int j = 0;
     while(h->size && i < len) {
         char *v = (char*)h->data;
@@ -282,19 +293,19 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *    and continue insertion algorithm as usually.
      */
     if (h->iscompr) {
-        printf("Stopped at compressed node %.*s (%p)\n",
+        debugf("Stopped at compressed node %.*s (%p)\n",
             h->size, h->data, (void*)h);
-        printf("Still to insert: %.*s\n", (int)(len-i), s+i);
-        printf("Splitting at %d: '%c'\n", j, ((char*)h->data)[j]);
-        printf("Other letter is '%c'\n", s[i]);
+        debugf("Still to insert: %.*s\n", (int)(len-i), s+i);
+        debugf("Splitting at %d: '%c'\n", j, ((char*)h->data)[j]);
+        debugf("Other letter is '%c'\n", s[i]);
 
         /* 1: Save next pointer. */
         trieNode **childfield = trieNodeLastChildPtr(h);
         trieNode *next = *childfield;
-        printf("Next is %p\n", (void*)next);
-        printf("iskey %d\n", h->iskey);
+        debugf("Next is %p\n", (void*)next);
+        debugf("iskey %d\n", h->iskey);
         if (h->iskey) {
-            printf("key value is %p\n", trieGetData(h));
+            debugf("key value is %p\n", trieGetData(h));
         }
 
         /* 2: Create the split node. */
@@ -372,7 +383,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
          * are other characters, so that that would result in a chain
          * of single-childed nodes, turn it into a compressed node. */
         if (h->size == 0 && len-i > 1) {
-            printf("Inserting compressed node\n");
+            debugf("Inserting compressed node\n");
             size_t comprsize = len-i;
             if (comprsize > TRIE_NODE_MAX_SIZE) comprsize = TRIE_NODE_MAX_SIZE;
             h = trieCompressNode(h,s+i,comprsize,&child);
@@ -380,7 +391,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             parentlink = trieNodeLastChildPtr(h);
             i += comprsize;
         } else {
-            printf("Inserting normal node\n");
+            debugf("Inserting normal node\n");
             h = trieAddChild(h,s[i],&child);
             trieNode **children = (trieNode**)(h->data+h->size);
             *parentlink = h;
@@ -402,21 +413,21 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
     size_t i = 0;
     trieNode *h = trie->head;
 
-    printf("### Lookup: %.*s\n", (int)len, s);
+    debugf("### Lookup: %.*s\n", (int)len, s);
     while(h->size && i < len) {
-        printf("Lookup iteration node %p\n", (void*)h);
+        debugf("Lookup iteration node %p\n", (void*)h);
         char *v = (char*)h->data;
         int j;
 
-        printf("[%p %s] children: %.*s\n", (void*)h, h->iscompr ? "compr" : "plain", (int)h->size, v);
+        debugf("[%p %s] children: %.*s\n", (void*)h, h->iscompr ? "compr" : "plain", (int)h->size, v);
 
         if (h->iscompr) {
             for (j = 0; j < h->size && i < len; j++, i++) {
                 if (v[j] != s[i]) break;
-                printf("%c != %c? \n", v[j], s[i]);
+                debugf("%c != %c? \n", v[j], s[i]);
             }
             if (j != h->size) return trieNotFound;
-            printf("here %d %d\n", (int)i, (int)len);
+            debugf("here %d %d\n", (int)i, (int)len);
             j = 0; /* Our only child is at index 0 for compressed nodes. */
         } else {
             for (j = 0; j < h->size; j++) {
@@ -425,13 +436,13 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
             if (j == h->size) return trieNotFound;
             i++;
         }
-        printf("select next child\n");
+        debugf("select next child\n");
 
         trieNode **children = (trieNode**)(h->data+h->size);
         h = children[j];
     }
     if (i != len) return trieNotFound;
-    printf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
+    debugf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
     return h->iskey ? trieGetData(h) : trieNotFound;
 }
 
@@ -452,17 +463,12 @@ long long ustime(void) {
 
 int main(void) {
     trie *t = trieNew();
-    trieInsert(t,"abc",3,(void*)10);
-    trieInsert(t,"mystring",8,(void*)0x1);
-    trieInsert(t,"mystas",6,(void*)0x2);
-    trieInsert(t,"key:123",7,(void*)0x3);
-    trieInsert(t,"key:1234",8,(void*)0xff);
 
     long long start = ustime();
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i);
-        trieInsert(t,buf,len,(void*)(long)i);
+        trieInsert(t,(unsigned char*)buf,len,(void*)(long)i);
     }
     printf("Insert: %f\n", (double)(ustime()-start)/1000000);
 
@@ -470,7 +476,7 @@ int main(void) {
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i);
-        void *data = trieFind(t,buf,len);
+        void *data = trieFind(t,(unsigned char*)buf,len);
         if (data != (void*)(long)i) {
             printf("Issue with %s\n", buf);
         }
@@ -482,7 +488,7 @@ int main(void) {
         char buf[64];
         int r = rand() % 5000000;
         int len = snprintf(buf,sizeof(buf),"%d",r);
-        void *data = trieFind(t,buf,len);
+        void *data = trieFind(t,(unsigned char*)buf,len);
         if (data != (void*)(long)r) {
             printf("Issue with %s\n", buf);
         }
@@ -494,16 +500,11 @@ int main(void) {
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i+5000000);
-        void *data = trieFind(t,buf,len);
+        void *data = trieFind(t,(unsigned char*) buf,len);
         if (data != (void*)(long)i) count++;
     }
     printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 
-    void *data1 = trieFind(t,"mystring",8);
-    void *data2 = trieFind(t,"mystas",6);
-    void *data3 = trieFind(t,"myzack",6);
-    void *data4 = trieFind(t,"key:123",7);
-    printf("%p %p %p %p\n", data1, data2, data3, data4);
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);
     return 0;
 }
