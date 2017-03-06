@@ -159,11 +159,11 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
  * and 1 is returned. */
 int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
     size_t i = 0;
-    trieNode **parentlink = NULL;
+    trieNode **parentlink = &trie->head;
     trieNode *h = trie->head;
 
-    printf("### Insert %.*s\n", (int)len, s);
-    int j;
+    printf("### Insert %.*s with value %p\n", (int)len, s, data);
+    int j = 0;
     while(h->size && i < len) {
         char *v = (char*)h->data;
 
@@ -196,11 +196,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             return 0; /* Element already exists. */
         }
         h = trieReallocForData(h,data);
-        if (parentlink) {
-            *parentlink = h;
-        } else {
-            trie->head = h;
-        }
+        *parentlink = h;
         trieSetData(h,data);
         return 1; /* Element inserted. */
     }
@@ -286,7 +282,8 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *    and continue insertion algorithm as usually.
      */
     if (h->iscompr) {
-        printf("Stopped at compressed node %.*s\n", h->size, h->data);
+        printf("Stopped at compressed node %.*s (%p)\n",
+            h->size, h->data, (void*)h);
         printf("Still to insert: %.*s\n", (int)(len-i), s+i);
         printf("Splitting at %d: '%c'\n", j, ((char*)h->data)[j]);
         printf("Other letter is '%c'\n", s[i]);
@@ -294,6 +291,11 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         /* 1: Save next pointer. */
         trieNode **childfield = trieNodeLastChildPtr(h);
         trieNode *next = *childfield;
+        printf("Next is %p\n", (void*)next);
+        printf("iskey %d\n", h->iskey);
+        if (h->iskey) {
+            printf("key value is %p\n", trieGetData(h));
+        }
 
         /* 2: Create the split node. */
         trieNode *splitnode = trieNewNode(1);
@@ -314,11 +316,13 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             trieNode *trimmed = malloc(nodesize);
             trimmed->size = j;
             memcpy(trimmed->data,h->data,j);
-            if (h->iskey) {
+            trimmed->iscompr = j > 1 ? 1 : 0;
+            trimmed->iskey = h->iskey;
+            trimmed->isnull = h->isnull;
+            if (h->iskey && !h->isnull) {
                 void *ndata = trieGetData(h);
                 trieSetData(trimmed,ndata);
             }
-            trimmed->iscompr = j > 1 ? 1 : 0;
             trieNode **cp = trieNodeLastChildPtr(trimmed);
             *cp = splitnode;
             *parentlink = trimmed;
@@ -346,7 +350,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         }
 
         /* 5: Set splitnode first child as the postfix node. */
-        trieNode **splitchild = trieNodeLastChildPtr(splitnode)-1;
+        trieNode **splitchild = trieNodeLastChildPtr(splitnode);
         *splitchild = postfix;
 
         /* 6. Continue insertion: this will cause the splitnode to
@@ -370,25 +374,22 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             size_t comprsize = len-i;
             if (comprsize > TRIE_NODE_MAX_SIZE) comprsize = TRIE_NODE_MAX_SIZE;
             h = trieCompressNode(h,s+i,comprsize,&child);
+            *parentlink = h;
+            parentlink = trieNodeLastChildPtr(h);
             i += comprsize;
         } else {
             printf("Inserting normal node\n");
             h = trieAddChild(h,s[i],&child);
+            trieNode **children = (trieNode**)(h->data+h->size);
+            *parentlink = h;
+            parentlink = &children[h->size-1];
             i++;
         }
-
-        /* Fix parent's reference now that we reallocated. */
-        if (parentlink) {
-            *parentlink = h;
-        } else {
-            trie->head = h;
-        }
-        trieNode **children = (trieNode**)(h->data+h->size);
-        parentlink = &children[h->size-1];
         h = child;
     }
     h = trieReallocForData(h,data);
     trieSetData(h,data);
+    *parentlink = h;
     return 1; /* Element inserted. */
 }
 
@@ -518,5 +519,6 @@ int main(void) {
     printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
     printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
     trieInsert(t,(unsigned char*)"annientare",10,(void*)3);
+    printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
 }
 #endif
