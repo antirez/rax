@@ -164,17 +164,26 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
     return n;
 }
 
-/* Insert the element 's' of size 'len', setting as auxiliary data
- * the pointer 'data'. If the element is already present, the associated
- * data is updated, and 0 is returned, otherwise the element is inserted
- * and 1 is returned. */
-int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
-    size_t i = 0;
-    trieNode **parentlink = &trie->head;
+/* Low level function that walks the tree looking for the string
+ * 's' of 'len' bytes. The function returns the number of characters
+ * of the key that was possible to process: if the returned integer
+ * is the same as 'len', then it means that the node corresponding to the
+ * string was found (however it may not be a key, node->iskey == 0).
+ * Otherwise there was an early stop.
+ *
+ * The node where the search ended (because the full string was processed
+ * or because there was an early stop) is returned by reference as
+ * '*stopnode' if the passed pointer is not NULL. This node link in the
+ * parent's node is returned as '*plink' if not NULL. Finally, if the
+ * search stopped in a compressed node, '*splitpos' returns the index
+ * inside the compressed node where the search ended. This is ussful to
+ * know where to split the node for insertion. */
+size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
     trieNode *h = trie->head;
+    trieNode **parentlink = &trie->head;
 
-    debugf("### Insert %.*s with value %p\n", (int)len, s, data);
-    int j = 0;
+    size_t i = 0; /* Position in the string. */
+    size_t j = 0; /* Position in the node children / bytes (if compressed). */
     while(h->size && i < len) {
         char *v = (char*)h->data;
 
@@ -196,6 +205,26 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         h = children[j];
         parentlink = &children[j];
     }
+    if (stopnode) *stopnode = h;
+    if (plink) *plink = parentlink;
+    if (splitpos && h->iscompr) *splitpos = j;
+    return i;
+}
+
+/* Insert the element 's' of size 'len', setting as auxiliary data
+ * the pointer 'data'. If the element is already present, the associated
+ * data is updated, and 0 is returned, otherwise the element is inserted
+ * and 1 is returned. */
+int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
+    size_t i;
+    int j = 0; /* Split position. If trieLowWalk() stops in a compressed node,
+                  the index 'j' represents the char we stopped within the
+                  compressed node, that is, the position where to split the
+                  node for insertion. */
+    trieNode *h, **parentlink;
+
+    debugf("### Insert %.*s with value %p\n", (int)len, s, data);
+    i = trieLowWalk(trie,s,len,&h,&parentlink,&j);
 
     /* If i == len we walked following the whole string, so the
      * string is either already inserted or this middle node is
@@ -400,6 +429,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         }
         h = child;
     }
+    if (!h->iskey) trie->numele++;
     h = trieReallocForData(h,data);
     trieSetData(h,data);
     *parentlink = h;
@@ -410,37 +440,10 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
  * if the item was not found, otherwise the value associated with the
  * item is returned. */
 void *trieFind(trie *trie, unsigned char *s, size_t len) {
-    size_t i = 0;
-    trieNode *h = trie->head;
+    trieNode *h;
 
     debugf("### Lookup: %.*s\n", (int)len, s);
-    while(h->size && i < len) {
-        debugf("Lookup iteration node %p\n", (void*)h);
-        char *v = (char*)h->data;
-        int j;
-
-        debugf("[%p %s] children: %.*s\n", (void*)h, h->iscompr ? "compr" : "plain", (int)h->size, v);
-
-        if (h->iscompr) {
-            for (j = 0; j < h->size && i < len; j++, i++) {
-                if (v[j] != s[i]) break;
-                debugf("%c != %c? \n", v[j], s[i]);
-            }
-            if (j != h->size) return trieNotFound;
-            debugf("here %d %d\n", (int)i, (int)len);
-            j = 0; /* Our only child is at index 0 for compressed nodes. */
-        } else {
-            for (j = 0; j < h->size; j++) {
-                if (v[j] == s[i]) break;
-            }
-            if (j == h->size) return trieNotFound;
-            i++;
-        }
-        debugf("select next child\n");
-
-        trieNode **children = (trieNode**)(h->data+h->size);
-        h = children[j];
-    }
+    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL);
     if (i != len) return trieNotFound;
     debugf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
     return h->iskey ? trieGetData(h) : trieNotFound;
@@ -506,6 +509,7 @@ int main(void) {
     printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);
+    printf("%llu total elements\n", (unsigned long long)t->numele);
     return 0;
 }
 #endif
