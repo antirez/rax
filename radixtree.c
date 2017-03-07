@@ -178,7 +178,7 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
  * search stopped in a compressed node, '*splitpos' returns the index
  * inside the compressed node where the search ended. This is ussful to
  * know where to split the node for insertion. */
-size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
+inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
     trieNode *h = trie->head;
     trieNode **parentlink = &trie->head;
 
