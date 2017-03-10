@@ -105,6 +105,7 @@ typedef struct trie {
     uint64_t numnodes;
 } trie;
 
+/* A special pointer returned for not found items. */
 extern void *trieNotFound;
 
 #endif

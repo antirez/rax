@@ -15,7 +15,62 @@
 #define debugf(...)
 #endif
 
+/* This is a special pointer that is guaranteed to never have the same value
+ * of a radix tree node. It's used in order to report "not found" error without
+ * requiring the function to have multiple return values. */
 void *trieNotFound = (void*)"trie-not-found-pointer";
+
+/* ------------------------- trieStack functions ------------------------------
+ * The trieStack is a simple stack of pointers that is capable of switching
+ * from using a stack-allocated array to dynamic heap once a given number of
+ * items are reached. It is used in order to retain the list of parent nodes
+ * while walking the radix tree in order to implement certain operations that
+ * need to navigate the tree upward.
+ * ------------------------------------------------------------------------- */
+
+#define TRIESTACK_STACK_ITEMS 32
+typedef struct trieStack {
+    void **stack;
+    size_t items, maxitems;
+    void *static_items[TRIESTACK_STACK_ITEMS];
+} triestack;
+
+/* Initialize the stack. */
+static inline void trieStackInit(triestack *ts) {
+    ts->stack = ts->static_items;
+    ts->items = 0;
+    ts->maxitems = TRIESTACK_STACK_ITEMS;
+}
+
+/* Push an item into the stack, returns 1 on success, 0 on out of memory. */
+static inline int trieStackPush(triestack *ts, void *ptr) {
+    if (ts->items == ts->maxitems) {
+        if (ts->stack == ts->static_items) {
+            ts->stack = malloc(sizeof(void*)*ts->maxitems*2);
+            memcpy(ts->stack,ts->static_items,sizeof(void*)*ts->maxitems);
+        } else {
+            ts->stack = realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
+        }
+        if (ts->stack == NULL) return 0;
+        ts->maxitems *= 2;
+    }
+    ts->stack[ts->items] = ptr;
+    ts->items++;
+    return 1;
+}
+
+/* Pop an item from the stack, the function returns NULL if there are no
+ * items to pop. */
+static inline void *trieStackPop(triestack *ts) {
+    if (ts->items == 0) return NULL;
+    ts->items--;
+    return ts->stack[ts->items];
+}
+
+/* Free the stack in case we used heap allocation. */
+static inline void trieStackFree(triestack *ts) {
+    if (ts->stack != ts->static_items) free(ts->stack);
+}
 
 /* Allocate a new non compressed node with the specified number of children. */
 trieNode *trieNewNode(size_t children) {
@@ -27,6 +82,10 @@ trieNode *trieNewNode(size_t children) {
     node->size = children;
     return node;
 }
+
+/* ----------------------------------------------------------------------------
+ * Radis tree implementation
+ * --------------------------------------------------------------------------*/
 
 /* Allocate a new trie. */
 trie *trieNew(void) {
@@ -178,7 +237,7 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
  * search stopped in a compressed node, '*splitpos' returns the index
  * inside the compressed node where the search ended. This is ussful to
  * know where to split the node for insertion. */
-inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
+static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
     trieNode *h = trie->head;
     trieNode **parentlink = &trie->head;
 
@@ -449,6 +508,27 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
     return h->iskey ? trieGetData(h) : trieNotFound;
 }
 
+/* Remove the specified item. Returns 1 if the item was found and
+ * deleted, 0 otherwise. */
+int trieRemove(trie *trie, unsigned char *s, size_t len) {
+    trieNode *h;
+
+    debugf("### Delete: %.*s\n", (int)len, s);
+    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL);
+    if (i != len || !h->iskey) return 0;
+    h->iskey = 0;
+
+    /* If this node has no children, the deletion needs to reclaim the
+     * no longer used nodes. This is an iterative process that needs to
+     * walk the three upward, deleting all the nodes without children,
+     * until the head of the trie, or the first node with children is
+     * found. */
+    if (h->size == 0) {
+        debugf("Node without children deleted. Cleanup needed.\n");
+    }
+    return 1;
+}
+
 #ifdef BENCHMARK_MAIN
 #include <stdio.h>
 #include <sys/time.h>
@@ -527,5 +607,10 @@ int main(void) {
     printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
     trieInsert(t,(unsigned char*)"annientare",10,(void*)3);
     printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
+    trieRemove(t,(unsigned char*)"a",1);
+    trieRemove(t,(unsigned char*)"annientare",10);
+    printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
+    printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
+    printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
 }
 #endif
