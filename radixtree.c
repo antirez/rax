@@ -4,7 +4,7 @@
 #include "radixtree.h"
 
 /* Turn debugging messages on/off. */
-#if 0
+#if 1
 #include <stdio.h>
 #define debugf(...)                                                            \
     do {                                                                       \
@@ -33,17 +33,17 @@ typedef struct trieStack {
     void **stack;
     size_t items, maxitems;
     void *static_items[TRIESTACK_STACK_ITEMS];
-} triestack;
+} trieStack;
 
 /* Initialize the stack. */
-static inline void trieStackInit(triestack *ts) {
+static inline void trieStackInit(trieStack *ts) {
     ts->stack = ts->static_items;
     ts->items = 0;
     ts->maxitems = TRIESTACK_STACK_ITEMS;
 }
 
 /* Push an item into the stack, returns 1 on success, 0 on out of memory. */
-static inline int trieStackPush(triestack *ts, void *ptr) {
+static inline int trieStackPush(trieStack *ts, void *ptr) {
     if (ts->items == ts->maxitems) {
         if (ts->stack == ts->static_items) {
             ts->stack = malloc(sizeof(void*)*ts->maxitems*2);
@@ -61,14 +61,14 @@ static inline int trieStackPush(triestack *ts, void *ptr) {
 
 /* Pop an item from the stack, the function returns NULL if there are no
  * items to pop. */
-static inline void *trieStackPop(triestack *ts) {
+static inline void *trieStackPop(trieStack *ts) {
     if (ts->items == 0) return NULL;
     ts->items--;
     return ts->stack[ts->items];
 }
 
 /* Free the stack in case we used heap allocation. */
-static inline void trieStackFree(triestack *ts) {
+static inline void trieStackFree(trieStack *ts) {
     if (ts->stack != ts->static_items) free(ts->stack);
 }
 
@@ -237,7 +237,7 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
  * search stopped in a compressed node, '*splitpos' returns the index
  * inside the compressed node where the search ended. This is ussful to
  * know where to split the node for insertion. */
-static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos) {
+static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos, trieStack *ts) {
     trieNode *h = trie->head;
     trieNode **parentlink = &trie->head;
 
@@ -259,6 +259,7 @@ static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieN
             i++;
         }
 
+        if (ts) trieStackPush(ts,h); /* Save stack of parent nodes. */
         trieNode **children = (trieNode**)(h->data+h->size);
         if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
         h = children[j];
@@ -283,7 +284,7 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
     trieNode *h, **parentlink;
 
     debugf("### Insert %.*s with value %p\n", (int)len, s, data);
-    i = trieLowWalk(trie,s,len,&h,&parentlink,&j);
+    i = trieLowWalk(trie,s,len,&h,&parentlink,&j,NULL);
 
     /* If i == len we walked following the whole string, so the
      * string is either already inserted or this middle node is
@@ -502,30 +503,129 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
     trieNode *h;
 
     debugf("### Lookup: %.*s\n", (int)len, s);
-    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL);
+    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL,NULL);
     if (i != len) return trieNotFound;
     debugf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
     return h->iskey ? trieGetData(h) : trieNotFound;
+}
+
+/* Return the memory address where the 'parent' node stores the specified
+ * 'child' pointer, so that the caller can update the pointer with another
+ * one if needed. The function assumes it will find a match, otherwise the
+ * operation is an undefined behavior (it will continue scanning the
+ * memory without any bound checking). */
+trieNode **trieFindParentLink(trieNode *parent, trieNode *child) {
+    trieNode **cp = trieNodeLastChildPtr(parent) - (parent->size-1);
+    while(*cp != child) cp++;
+    return cp;
+}
+
+/* Low level child removal from node. The new node pointer (after the child
+ * removal) is returned. Note that this function does not fix the pointer
+ * of the node in its parent, so this task is up to the caller. */
+trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
+    /* If parent is a compressed node (having a single child, as for definition
+     * of the data structure), the removal of the child consists into turning
+     * it into a normal node without children. */
+    if (parent->iscompr) {
+        trieNode *newnode = trieNewNode(0);
+        if (parent->iskey) {
+            void *data = trieGetData(parent);
+            newnode = trieReallocForData(newnode,data);
+            trieSetData(newnode,data);
+        }
+        return newnode;
+    }
+
+    /* Otherwise we need to scan for the children pointer and memmove()
+     * accordingly.
+     *
+     * 1. To start we seek the first element in both the children
+     *    pointers and edge bytes in the node. */
+    trieNode **cp = trieNodeLastChildPtr(parent) - (parent->size-1);
+    trieNode **c = cp;
+    unsigned char *e = parent->data;
+
+    /* 2. Search the child pointer to remove inside the array of children
+     *    pointers. */
+    while(*c != child) {
+        c++;
+        e++;
+    }
+
+    /* 3. Remove the edge and the pointer by memmoving the remaining children
+     *    pointer and edge bytes one position before. */
+    int taillen = parent->size - (e - parent->data) - 1;
+    memmove(e,e+1,taillen);
+    memmove(c,c+1,taillen*sizeof(trieNode*));
+
+    /* 4. Update size. */
+    parent->size--;
+
+    /* Realloc the node according to the theoretical memory usage, to free
+     * data if we are over-allocating right now. */
+    trieNode *newnode = realloc(parent,trieNodeCurrentLength(parent));
+    /* Note: if realloc() fails we just return the old address, which
+     * is valid. */
+    return newnode ? newnode : parent;
 }
 
 /* Remove the specified item. Returns 1 if the item was found and
  * deleted, 0 otherwise. */
 int trieRemove(trie *trie, unsigned char *s, size_t len) {
     trieNode *h;
+    trieStack ts;
 
     debugf("### Delete: %.*s\n", (int)len, s);
-    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL);
-    if (i != len || !h->iskey) return 0;
+    trieStackInit(&ts);
+    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL,&ts);
+    if (i != len || !h->iskey) {
+        trieStackFree(&ts);
+        return 0;
+    }
     h->iskey = 0;
 
     /* If this node has no children, the deletion needs to reclaim the
      * no longer used nodes. This is an iterative process that needs to
-     * walk the three upward, deleting all the nodes without children,
-     * until the head of the trie, or the first node with children is
-     * found. */
+     * walk the three upward, deleting all the nodes with just one child
+     * that are not keys, until the head of the trie is reached or the first
+     * node with more than one child is found. */
     if (h->size == 0) {
-        debugf("Node without children deleted. Cleanup needed.\n");
+        debugf("Key deleted in node without children. Cleanup needed.\n");
+        trieNode *child = NULL;
+        while(h != trie->head) {
+            child = h;
+            debugf("Freeing child %p\n", (void*)child);
+            free(child);
+            trie->numnodes--;
+            h = trieStackPop(&ts);
+             /* If this node has more then one child, or actually holds
+              * a key, stop here. */
+            if (h->iskey || (!h->iscompr && h->size != 1)) break;
+        }
+        if (child) {
+            debugf("Unlinking child %p from parent %p\n",
+                (void*)child, (void*)h);
+            trieNode *new = trieRemoveChild(h,child);
+            if (new != h) {
+                trieNode *parent = trieStackPop(&ts);
+                trieNode **parentlink;
+                if (parent == NULL) {
+                    parentlink = &trie->head;
+                } else {
+                    parentlink = trieFindParentLink(parent,h);
+                }
+                *parentlink = new;
+            }
+
+            /* XXX: if after the removal the node has just a single child
+             * we need to try to compress it. */
+            if (new->size == 1) {
+                debugf("Re-compression attempt needed.\n");
+            }
+        }
     }
+    trieStackFree(&ts);
     return 1;
 }
 
