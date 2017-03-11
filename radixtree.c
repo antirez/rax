@@ -11,8 +11,18 @@
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
         printf(__VA_ARGS__);                                                   \
     } while (0);
+#define debugnode(msg,n)                                                       \
+    do {                                                                       \
+        printf("%s: %p [%.*s] key:%d size:%d children:",                       \
+            msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);   \
+        int numcld = n->iscompr ? 1 : n->size;                                 \
+        trieNode **cldptr = trieNodeLastChildPtr(n) - (numcld-1);              \
+        while(numcld--) printf("%p ", (void*)*(cldptr++));                     \
+        printf("\n");                                                          \
+    } while (0);
 #else
 #define debugf(...)
+#define debugnode(msg,n)
 #endif
 
 /* This is a special pointer that is guaranteed to never have the same value
@@ -515,7 +525,8 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
  * operation is an undefined behavior (it will continue scanning the
  * memory without any bound checking). */
 trieNode **trieFindParentLink(trieNode *parent, trieNode *child) {
-    trieNode **cp = trieNodeLastChildPtr(parent) - (parent->size-1);
+    trieNode **cp = trieNodeLastChildPtr(parent);
+    if (!parent->iscompr) cp -= (parent->size-1);
     while(*cp != child) cp++;
     return cp;
 }
@@ -524,6 +535,7 @@ trieNode **trieFindParentLink(trieNode *parent, trieNode *child) {
  * removal) is returned. Note that this function does not fix the pointer
  * of the node in its parent, so this task is up to the caller. */
 trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
+    debugnode("trieRemoveChild before", parent);
     /* If parent is a compressed node (having a single child, as for definition
      * of the data structure), the removal of the child consists into turning
      * it into a normal node without children. */
@@ -534,6 +546,7 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
             newnode = trieReallocForData(newnode,data);
             trieSetData(newnode,data);
         }
+        debugnode("trieRemoveChild after", newnode);
         return newnode;
     }
 
@@ -556,8 +569,15 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
     /* 3. Remove the edge and the pointer by memmoving the remaining children
      *    pointer and edge bytes one position before. */
     int taillen = parent->size - (e - parent->data) - 1;
+    debugf("trieRemoveChild tail len: %d\n", taillen);
     memmove(e,e+1,taillen);
-    memmove(c,c+1,taillen*sizeof(trieNode*));
+
+    /* Since we have one data byte less, also child pointers start one byte
+     * before now. */
+    memmove(((char*)cp)-1,cp,(parent->size - taillen - 1)*sizeof(trieNode**));
+
+    /* Move the remaining "tail" pointer at the right position as well. */
+    memmove(((char*)c)-1,c+1,taillen*sizeof(trieNode**));
 
     /* 4. Update size. */
     parent->size--;
@@ -565,6 +585,7 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
     /* Realloc the node according to the theoretical memory usage, to free
      * data if we are over-allocating right now. */
     trieNode *newnode = realloc(parent,trieNodeCurrentLength(parent));
+    debugnode("trieRemoveChild after", newnode);
     /* Note: if realloc() fails we just return the old address, which
      * is valid. */
     return newnode ? newnode : parent;
@@ -595,7 +616,8 @@ int trieRemove(trie *trie, unsigned char *s, size_t len) {
         trieNode *child = NULL;
         while(h != trie->head) {
             child = h;
-            debugf("Freeing child %p\n", (void*)child);
+            debugf("Freeing child %p [%.*s] key:%d\n", (void*)child,
+                (int)child->size, (char*)child->data, child->iskey);
             free(child);
             trie->numnodes--;
             h = trieStackPop(&ts);
