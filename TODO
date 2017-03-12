@@ -4,3 +4,6 @@
 * Test the insertion of strings greater then 512 MB.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Make the code alignment-safe.
+* Handle OOM everywhere.
+* Change trie...() into radtree()...
+* All the low level node management functions should be called radtreeNode...()
