@@ -254,6 +254,7 @@ static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieN
     size_t i = 0; /* Position in the string. */
     size_t j = 0; /* Position in the node children / bytes (if compressed). */
     while(h->size && i < len) {
+        debugnode("Lookup current node",h);
         char *v = (char*)h->data;
 
         if (h->iscompr) {
@@ -296,11 +297,12 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
     debugf("### Insert %.*s with value %p\n", (int)len, s, data);
     i = trieLowWalk(trie,s,len,&h,&parentlink,&j,NULL);
 
-    /* If i == len we walked following the whole string, so the
-     * string is either already inserted or this middle node is
-     * currently not a key. We have just to reallocate the node
-     * and make space for the data pointer. */
-    if (i == len) {
+    /* If i == len we walked following the whole string. If we are not
+     * in the middle of a compressed node, the string is either already
+     * inserted or this middle node is currently not a key, but can represent
+     * our key. We have just to reallocate the node and make space for the
+     * data pointer. */
+    if (i == len && (!h->iscompr || j == h->size)) {
         if (h->iskey) {
             trieSetData(h,data);
             return 0; /* Element already exists. */
@@ -330,7 +332,8 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *
      * When inserting we may face the following cases. Note that all the cases
      * require the insertion of a non compressed node with exactly two
-     * children.
+     * children, except for the last case which just requires splitting a
+     * compressed node.
      *
      * 1) Inserting "ANNIENTARE"
      *
@@ -356,8 +359,23 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *     |-|
      *     |C| -> (... continue algo ...) "IAO" -> []
      *
+     * 5) Inserting "ANNI"
+     *
+     *     "ANNI" -> "BALE" -> "SCO" -> []
+     *
      * The final algorithm for insertion covering all the above cases is as
-     * follows:
+     * follows.
+     *
+     * ============================= ALGO 1 =============================
+     *
+     * For the above cases 1 to 4, that is, all cases where we stopped in
+     * the middle of a compressed node for a character mismatch, do:
+     *
+     * Let $SPLITPOS be the zero-based index at which, in the
+     * compressed node array of characters, we found the mismatching
+     * character. For example if the node contains "ANNIBALE" and we add
+     * "ANNIENTARE" the $SPLITPOS is 4, that is, the index at which the
+     * mismatching character is found.
      *
      * 1. Save the current compressed node $NEXT pointer (the pointer to the
      *    child element, that is always present in compressed nodes).
@@ -367,12 +385,12 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *    will be added later as we continue the normal insertion algorithm
      *    at step "6".
      *
-     * 3a. IF split position is 0:
+     * 3a. IF $SPLITPOS == 0:
      *     Replace the old node with the split node, by copying the auxiliary
      *     data if any. Fix parent's reference. Free old node eventually
      *     (we still need its data for the next steps of the algorithm).
      *
-     * 3b. IF split position != 0:
+     * 3b. IF $SPLITPOS != 0:
      *     Trim the compressed node (reallocating it as well) in order to
      *     contain $splitpos characters. Change chilid pointer in order to link
      *     to the split node. If new compressed node len is just 1, set
@@ -390,13 +408,42 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      *
      * 6. Set the split node as the current node, set current index at child[1]
      *    and continue insertion algorithm as usually.
+     *
+     * ============================= ALGO 2 =============================
+     *
+     * For case 5, that is, if we stopped in the middle of a compressed
+     * node but no mismatch was found, do:
+     *
+     * Let $SPLITPOS be the zero-based index at which, in the
+     * compressed node array of characters, we stopped iterating because
+     * there were no more keys character to match. So in the example of
+     * the node "ANNIBABLE", addig the string "ANNI", the $SPLITPOS is 4.
+     *
+     * 1. Save the current compressed node $NEXT pointer (the pointer to the
+     *    child element, that is always present in compressed nodes).
+     *
+     * 2. Create a "postfix node" containing all the characters from $SPLITPOS
+     *    to the end. Use $NEXT as the postfix node child pointer.
+     *    If the postfix node length is 1, set iscompr to 0.
+     *    Set the node as a key with the associated value of the new
+     *    inserted key.
+     *
+     * 3. Trim the current node to contain the first $SPLITPOS characters.
+     *    As usually if the new node length is just 1, set iscompr to 0.
+     *    Take the iskey / associated value as it was in the orignal node.
+     *    Fix the parent's reference.
+     *
+     * 4. Set the postfix node as the only child pointer of the trimmed
+     *    node created at step 1.
      */
-    if (h->iscompr) {
-        debugf("Stopped at compressed node %.*s (%p)\n",
+
+    /* ------------------------- ALGORITHM 1 --------------------------- */
+    if (h->iscompr && i != len) {
+        debugf("ALGO 1: Stopped at compressed node %.*s (%p)\n",
             h->size, h->data, (void*)h);
         debugf("Still to insert: %.*s\n", (int)(len-i), s+i);
         debugf("Splitting at %d: '%c'\n", j, ((char*)h->data)[j]);
-        debugf("Other letter is '%c'\n", s[i]);
+        debugf("Other (key) letter is '%c'\n", s[i]);
 
         /* 1: Save next pointer. */
         trieNode **childfield = trieNodeLastChildPtr(h);
@@ -470,10 +517,58 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
          * inserted key). */
         free(h);
         h = splitnode;
+    } else if (h->iscompr && i == len) {
+    /* ------------------------- ALGORITHM 2 --------------------------- */
+        debugf("ALGO 2: Stopped at compressed node %.*s (%p)\n",
+            h->size, h->data, (void*)h);
+
+        /* 1: Save next pointer. */
+        trieNode **childfield = trieNodeLastChildPtr(h);
+        trieNode *next = *childfield;
+
+        /* 2: Create the postfix node. */
+        size_t postfixlen = h->size - j;
+        size_t nodesize = sizeof(trieNode)+postfixlen+sizeof(trieNode*);
+        if (data != NULL) nodesize += sizeof(void*);
+        trieNode *postfix = malloc(nodesize);
+        postfix->size = postfixlen;
+        postfix->iscompr = postfixlen > 1;
+        memcpy(postfix->data,h->data+j,postfixlen);
+        trieSetData(postfix,data);
+        trieNode **cp = trieNodeLastChildPtr(postfix);
+        *cp = next;
+        trie->numnodes++;
+
+        /* 3: Trim the compressed node. */
+        nodesize = sizeof(trieNode)+j+sizeof(trieNode*);
+        if (h->iskey && !h->isnull) nodesize += sizeof(void*);
+        trieNode *trimmed = malloc(nodesize);
+        trimmed->size = j;
+        trimmed->iskey = 0;
+        trimmed->isnull = 0;
+        memcpy(trimmed->data,h->data,j);
+        trimmed->iscompr = j > 1 ? 1 : 0;
+        *parentlink = trimmed;
+        if (h->iskey) {
+            void *aux = trieGetData(h);
+            trieSetData(trimmed,aux);
+        }
+        trie->numele++;
+
+        /* Fix the trimmed node child pointer to point to
+         * the postfix node. */
+        cp = trieNodeLastChildPtr(trimmed);
+        *cp = postfix;
+
+        /* Finish! We don't need to contine with the insertion
+         * algorithm for ALGO 2. The key is already inserted. */
+        return 1; /* Key inserted. */
     }
 
     /* We walked the trie as far as we could, but still there are left
-     * chars in our string. We need to insert the missing nodes. */
+     * chars in our string. We need to insert the missing nodes.
+     * Note: while loop never entered if the node was split by ALGO2,
+     * since i == len. */
     while(i < len) {
         trieNode *child;
         trie->numnodes++;
@@ -641,8 +736,8 @@ int trieRemove(trie *trie, unsigned char *s, size_t len) {
             }
 
             /* XXX: if after the removal the node has just a single child
-             * we need to try to compress it. */
-            if (new->size == 1) {
+             * and is not a key, we need to try to compress it. */
+            if (new->size == 1 && new->iskey == 0) {
                 debugf("Re-compression attempt needed.\n");
             }
         }
@@ -722,6 +817,7 @@ int main(void) {
 int main(void) {
     printf("notfound = %p\n", trieNotFound);
     trie *t = trieNew();
+    #if 0
     trieInsert(t,(unsigned char*)"a",1,(void*)1);
     printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
     trieInsert(t,(unsigned char*)"annibale",8,(void*)2);
@@ -734,5 +830,13 @@ int main(void) {
     printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
     printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
     printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
+    #else
+    trieInsert(t,(unsigned char*)"foobar",6,(void*)1);
+    trieInsert(t,(unsigned char*)"foo",3,(void*)2);
+    trieInsert(t,(unsigned char*)"foob",4,(void*)3);
+    printf("foobar = %p\n", trieFind(t,(unsigned char*)"foobar",6));
+    printf("foo = %p\n", trieFind(t,(unsigned char*)"foo",3));
+    printf("foob = %p\n", trieFind(t,(unsigned char*)"foob",4));
+    #endif
 }
 #endif
