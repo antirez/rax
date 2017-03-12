@@ -1,9 +1,35 @@
 * Insert new nodes in-place, so that the string of characters inside a node
   is taken sorted, and we can use binary search or just stop scanning
   once a char greater than the one we are looking for is found.
+  This also makes the tree lexicographically ordered which is a huge
+  feature to have for certain use cases.
 * Test the insertion of strings greater then 512 MB.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Make the code alignment-safe.
-* Handle OOM everywhere.
-* Change trie...() into radtree()...
+* Handle OOM everywhere. Consider a define to switch checking off if it has
+  a measurable performance cost.
+* Change function prefix trie...() into radtree()...
 * All the low level node management functions should be called radtreeNode...()
+* radtreeFree() API to remove a whole radix tree. It's a simple recursive
+  function visiting all the nodes depth-first, and freeing them.
+* Write a complete unit test, testing with gcov that coverage is 100%.
+* Write a fuzzer.
+* Make sure nodes and keys counting is always updated.
+* Add an interator: radtreeSeek() to start the iteration at a given element
+  (should support and start and stop point, inclusive and exclsive both sides,
+   and should be able to see at the start or end of the range. Moreover there
+   should be ways to specify first and last elements of the three).
+   Iteration should work using radtreeNext() and radtreePrev() to navigate
+   the tree, returing the keys and associated values.
+
+   Example:
+
+   radtreeIterator *iterator = radtreeSeek("abc",3,RADTREE_INCL,
+                                           "xyz',3,RADTREE_EXCL,
+                                           RADTREE_SEEK_START);
+   while(radtreeNext(iterator) != RADTREE_END) {
+      printf("key: %.*s, val %p\n", (int)iterator->keylen,
+                                    (char*)iterator->key,
+                                    iterator->val);
+   }
+   radtreeFreeIterator(iterator);
