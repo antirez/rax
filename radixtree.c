@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 #include "radixtree.h"
 
 /* Turn debugging messages on/off. */
 #if 0
-#include <stdio.h>
 #define debugf(...)                                                            \
     do {                                                                       \
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
@@ -710,6 +710,10 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
      * walk the three upward, deleting all the nodes with just one child
      * that are not keys, until the head of the radtree is reached or the first
      * node with more than one child is found. */
+
+    int trycompress = 0; /* Will be set to 1 if we should try to optimize the
+                            tree resulting from the deletion. */
+
     if (h->size == 0) {
         debugf("Key deleted in node without children. Cleanup needed.\n");
         radtreeNode *child = NULL;
@@ -739,18 +743,66 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 *parentlink = new;
             }
 
-            /* XXX: if after the removal the node has just a single child
+            /* If after the removal the node has just a single child
              * and is not a key, we need to try to compress it. */
             if (new->size == 1 && new->iskey == 0) {
-                debugf("Re-compression attempt needed.\n");
+                trycompress = 1;
+                h = new;
             }
         }
+    } else if (h->size == 1) {
+        /* If the node had just one child, after the removal of the key
+         * further compression with adjacent nodes is pontentially possible. */
+        trycompress = 1;
     }
 
-    /* XXX: If the node had just one child, after the removal of the key
-     * further compression with adjacent nodes is pontentially possible. */
-    if (h->size == 1) {
+    /* Recompression: if trycompress is true, 'h' points to a radix tree node
+     * that changed in a way that could allow to compress nodes in this
+     * sub-branch. Compressed nodes represent chains of nodes that are not
+     * keys and have a single child, so there are two deletion events that
+     * may alter the tree so that further compression is needed:
+     *
+     * 1) A node with a single child was a key and now no longer is a key.
+     * 2) A node with two children now has just one child.
+     *
+     * We try to navigate upward till there are other nodes that can be
+     * compressed, when we reach the upper node which is not a key and has
+     * a single child, we scan the chain of children to collect the
+     * compressable part of the tree, and replace the current node with the
+     * new one, fixing the child pointer to reference the first non
+     * compressable node.
+     *
+     * Example of case "1". A tree stores the keys "FOO" = 1 and
+     * "FOOBAR" = 2:
+     *
+     *
+     * "FOO" -> "BAR" -> [] (2)
+     *           (1)
+     *
+     * After the removal of "FOO" the tree can be compressed as:
+     *
+     * "FOOBAR" -> [] (2)
+     *
+     *
+     * Example of case "2". A tree stores the keys "FOOBAR" = 1 and
+     * "FOOTER" = 2:
+     *
+     *          |B| -> "AR" -> [] (1)
+     * "FOO" -> |-|
+     *          |T| -> "ER" -> [] (2)
+     *
+     * After the removal of "FOOTER" the resulting tree is:
+     *
+     * "FOO" -> |B| -> "AR" -> [] (1)
+     *
+     * That can be compressed into:
+     *
+     * "FOOBAR" -> [] (1)
+     */
+    if (trycompress) {
+        debugnode("Attempt compression starting from",h);
     }
+
     radtreeStackFree(&ts);
     return 1;
 }
@@ -774,6 +826,70 @@ void radtreeFree(radtree *radtree) {
     radtreeRecursiveFree(radtree,radtree->head);
     assert(radtree->numnodes == 0);
     free(radtree);
+}
+
+/* This function is mostly used for debugging and learning purposes.
+ * It shows an ASCII representation of a tree on standard output, outling
+ * all the nodes and the contained keys.
+ *
+ * The representation is as follow:
+ *
+ *  "foobar" (compressed node)
+ *  [abc] (normal node with three children)
+ *  [abc]=0x12345678 (node is a key, pointing to value 0x12345678)
+ *  [] (a normal empty node)
+ *
+ *  Children are represented in new idented lines, each children prefixed by
+ *  the "`-(x)" string, where "x" is the edge byte.
+ *
+ *  [abc]
+ *   `-(a) "ladin"
+ *   `-(b) [kj]
+ *   `-(c) []
+ *
+ *  However when a node has a single child the following representation
+ *  is used instead:
+ *
+ *  [abc] -> "ladin" -> []
+ */
+
+/* The actual implementation of radtreeShow(). */
+void radtreeRecursiveShow(int level, int lpad, radtreeNode *n) {
+    char s = n->iscompr ? '"' : '[';
+    char e = n->iscompr ? '"' : ']';
+
+    int numchars = printf("%c%.*s%c", s, n->size, n->data, e);
+    if (n->iskey) {
+        numchars += printf("=%p",radtreeGetData(n));
+    }
+
+    int numchildren = n->iscompr ? 1 : n->size;
+    /* Note that 7 and 4 magic constants are the string length
+     * of " `-(x) " and " -> " respectively. */
+    if (level) {
+        lpad += (numchildren > 1) ? 7 : 4;
+        if (numchildren == 1) lpad += numchars;
+    }
+    radtreeNode **cp = radtreeNodeLastChildPtr(n);
+    cp -= numchildren-1;
+    for (int i = 0; i < numchildren; i++) {
+        char *branch = " `-(%c) ";
+        if (numchildren > 1) {
+            printf("\n");
+            for (int j = 0; j < lpad; j++) putchar(' ');
+            printf(branch,n->data[i]);
+        } else {
+            printf(" -> ");
+        }
+        radtreeRecursiveShow(level+1,lpad,*cp);
+        cp++;
+    }
+}
+
+/* Show a tree, as outlined in the comment above. */
+void radtreeShow(radtree *radtree) {
+    radtreeRecursiveShow(0,0,radtree->head);
+    putchar('\n');
 }
 
 #ifdef BENCHMARK_MAIN
@@ -853,19 +969,12 @@ int main(void) {
     printf("notfound = %p\n", radtreeNotFound);
     radtree *t = radtreeNew();
     #if 1
-    radtreeInsert(t,(unsigned char*)"a",1,(void*)1);
-    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
-    radtreeInsert(t,(unsigned char*)"annibale",8,(void*)2);
-    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
-    printf("annibale = %p\n", radtreeFind(t,(unsigned char*)"annibale",8));
-    radtreeInsert(t,(unsigned char*)"annientare",10,(void*)3);
-    printf("annientare = %p\n", radtreeFind(t,(unsigned char*)"annientare",10));
-    radtreeRemove(t,(unsigned char*)"a",1);
-    radtreeRemove(t,(unsigned char*)"annientare",10);
-    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
-    printf("annientare = %p\n", radtreeFind(t,(unsigned char*)"annientare",10));
-    printf("annibale = %p\n", radtreeFind(t,(unsigned char*)"annibale",8));
-    radtreeFree(t);
+    char *toadd[] = {"romane","romanus","romulus","rubens","ruber","rubicon","rubicundus",NULL};
+    long i = 0;
+    while (toadd[i] != NULL) {
+        radtreeInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
+        i++;
+    }
     #else
     radtreeInsert(t,(unsigned char*)"foobar",6,(void*)1);
     radtreeInsert(t,(unsigned char*)"foo",3,(void*)2);
@@ -873,6 +982,9 @@ int main(void) {
     printf("foobar = %p\n", radtreeFind(t,(unsigned char*)"foobar",6));
     printf("foo = %p\n", radtreeFind(t,(unsigned char*)"foo",3));
     printf("foob = %p\n", radtreeFind(t,(unsigned char*)"foob",4));
+    radtreeRemove(t,(unsigned char*)"foo",3);
     #endif
+    radtreeShow(t);
+    radtreeFree(t);
 }
 #endif
