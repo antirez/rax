@@ -1,11 +1,11 @@
-#ifndef TRIE_H
-#define TRIE_H
+#ifndef RADTREE_H
+#define RADTREE_H
 
 #include <stdint.h>
 
-/* Representation of a trie as implemented in this file, that contains
+/* Representation of a radix tree as implemented in this file, that contains
  * the strings "foo", "foobar" and "footer" after the insertion of each
- * word. When the node represents a key inside the trie, we write it
+ * word. When the node represents a key inside the radix tree, we write it
  * between [], otherwise it is written between ().
  *
  * This is the vanilla representation:
@@ -40,10 +40,10 @@
  *       "footer" []          [] "foobar"
  *
  * However this optimization makes the implementation a bit more complex.
- * For instance if a key "first" is added in the above trie, a "node splitting"
- * operation is needed, since the "foo" prefix is no longer composed of
- * nodes having a single child one after the other. This is the above tree
- * and the resulting node splitting after this event happens:
+ * For instance if a key "first" is added in the above radix tree, a
+ * "node splitting" operation is needed, since the "foo" prefix is no longer
+ * composed of nodes having a single child one after the other. This is the
+ * above tree and the resulting node splitting after this event happens:
  *
  *
  *                    (f) ""
@@ -63,8 +63,8 @@
  *
  */
 
-#define TRIE_NODE_MAX_SIZE ((1<<29)-1)
-typedef struct trieNode {
+#define RADTREE_NODE_MAX_SIZE ((1<<29)-1)
+typedef struct radtreeNode {
     uint32_t iskey:1;     /* Does this node contains a key? */
     uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
     uint32_t iscompr:1;   /* Node is compressed. */
@@ -72,7 +72,7 @@ typedef struct trieNode {
     /* Data layout is as follows:
      *
      * If node is not compressed we have 'size' bytes, one for each children
-     * character, and 'size' trieNode pointers, point to each child node.
+     * character, and 'size' radtreeNode pointers, point to each child node.
      * Note how the character is not stored in the children but in the
      * edge of the parents:
      *
@@ -88,24 +88,24 @@ typedef struct trieNode {
      * [header strlen=3][xyz][z-ptr](value-ptr?)
      *
      * Both compressed and not compressed nodes can represent a key
-     * with associated data in the trie at any level (not just terminal
+     * with associated data in the radix tree at any level (not just terminal
      * nodes).
      *
      * If the node has an associated key (iskey=1) and is not NULL
-     * (isnull=0), then after the trieNode pointers poiting to the
+     * (isnull=0), then after the radtreeNode pointers poiting to the
      * childen, an additional value pointer is present (as you can see
      * in the representation above as "value-ptr" field).
      */
     unsigned char data[];
-} trieNode;
+} radtreeNode;
 
-typedef struct trie {
-    trieNode *head;
+typedef struct radtree {
+    radtreeNode *head;
     uint64_t numele;
     uint64_t numnodes;
-} trie;
+} radtree;
 
 /* A special pointer returned for not found items. */
-extern void *trieNotFound;
+extern void *radtreeNotFound;
 
 #endif

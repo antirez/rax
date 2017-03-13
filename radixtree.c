@@ -4,7 +4,7 @@
 #include "radixtree.h"
 
 /* Turn debugging messages on/off. */
-#if 1
+#if 0
 #include <stdio.h>
 #define debugf(...)                                                            \
     do {                                                                       \
@@ -16,7 +16,7 @@
         printf("%s: %p [%.*s] key:%d size:%d children:",                       \
             msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);   \
         int numcld = n->iscompr ? 1 : n->size;                                 \
-        trieNode **cldptr = trieNodeLastChildPtr(n) - (numcld-1);              \
+        radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);        \
         while(numcld--) printf("%p ", (void*)*(cldptr++));                     \
         printf("\n");                                                          \
     } while (0);
@@ -28,32 +28,32 @@
 /* This is a special pointer that is guaranteed to never have the same value
  * of a radix tree node. It's used in order to report "not found" error without
  * requiring the function to have multiple return values. */
-void *trieNotFound = (void*)"trie-not-found-pointer";
+void *radtreeNotFound = (void*)"radtree-not-found-pointer";
 
-/* ------------------------- trieStack functions ------------------------------
- * The trieStack is a simple stack of pointers that is capable of switching
+/* ------------------------- radtreeStack functions --------------------------
+ * The radtreeStack is a simple stack of pointers that is capable of switching
  * from using a stack-allocated array to dynamic heap once a given number of
  * items are reached. It is used in order to retain the list of parent nodes
  * while walking the radix tree in order to implement certain operations that
  * need to navigate the tree upward.
  * ------------------------------------------------------------------------- */
 
-#define TRIESTACK_STACK_ITEMS 32
-typedef struct trieStack {
+#define RADTREESTACK_STACK_ITEMS 32
+typedef struct radtreeStack {
     void **stack;
     size_t items, maxitems;
-    void *static_items[TRIESTACK_STACK_ITEMS];
-} trieStack;
+    void *static_items[RADTREESTACK_STACK_ITEMS];
+} radtreeStack;
 
 /* Initialize the stack. */
-static inline void trieStackInit(trieStack *ts) {
+static inline void radtreeStackInit(radtreeStack *ts) {
     ts->stack = ts->static_items;
     ts->items = 0;
-    ts->maxitems = TRIESTACK_STACK_ITEMS;
+    ts->maxitems = RADTREESTACK_STACK_ITEMS;
 }
 
 /* Push an item into the stack, returns 1 on success, 0 on out of memory. */
-static inline int trieStackPush(trieStack *ts, void *ptr) {
+static inline int radtreeStackPush(radtreeStack *ts, void *ptr) {
     if (ts->items == ts->maxitems) {
         if (ts->stack == ts->static_items) {
             ts->stack = malloc(sizeof(void*)*ts->maxitems*2);
@@ -71,21 +71,26 @@ static inline int trieStackPush(trieStack *ts, void *ptr) {
 
 /* Pop an item from the stack, the function returns NULL if there are no
  * items to pop. */
-static inline void *trieStackPop(trieStack *ts) {
+static inline void *radtreeStackPop(radtreeStack *ts) {
     if (ts->items == 0) return NULL;
     ts->items--;
     return ts->stack[ts->items];
 }
 
 /* Free the stack in case we used heap allocation. */
-static inline void trieStackFree(trieStack *ts) {
+static inline void radtreeStackFree(radtreeStack *ts) {
     if (ts->stack != ts->static_items) free(ts->stack);
 }
 
+/* ----------------------------------------------------------------------------
+ * Radis tree implementation
+ * --------------------------------------------------------------------------*/
+
 /* Allocate a new non compressed node with the specified number of children. */
-trieNode *trieNewNode(size_t children) {
-    size_t nodesize = sizeof(trieNode)+children+sizeof(trieNode*)*children;
-    trieNode *node = malloc(nodesize);
+radtreeNode *radtreeNewNode(size_t children) {
+    size_t nodesize = sizeof(radtreeNode)+children+
+                      sizeof(radtreeNode*)*children;
+    radtreeNode *node = malloc(nodesize);
     node->iskey = 0;
     node->isnull = 0;
     node->iscompr = 0;
@@ -93,41 +98,38 @@ trieNode *trieNewNode(size_t children) {
     return node;
 }
 
-/* ----------------------------------------------------------------------------
- * Radis tree implementation
- * --------------------------------------------------------------------------*/
-
-/* Allocate a new trie. */
-trie *trieNew(void) {
-    trie *trie = malloc(sizeof(*trie));
-    trie->numele = 0;
-    trie->numnodes = 1;
-    trie->head = trieNewNode(0);
-    return trie;
+/* Allocate a new radtree. */
+radtree *radtreeNew(void) {
+    radtree *radtree = malloc(sizeof(*radtree));
+    radtree->numele = 0;
+    radtree->numnodes = 1;
+    radtree->head = radtreeNewNode(0);
+    return radtree;
 }
 
 /* Return the current total size of the node. */
-size_t trieNodeCurrentLength(trieNode *n) {
-    size_t curlen = sizeof(trieNode)+n->size;
-    curlen += n->iscompr ? sizeof(trieNode*) :
-                           sizeof(trieNode*)*n->size;
+size_t radtreeNodeCurrentLength(radtreeNode *n) {
+    size_t curlen = sizeof(radtreeNode)+n->size;
+    curlen += n->iscompr ? sizeof(radtreeNode*) :
+                           sizeof(radtreeNode*)*n->size;
     if (n->iskey && !n->isnull) curlen += sizeof(void*);
     return curlen;
 }
 
 /* Realloc the node to make room for auxiliary data in order
  * to store an item in that node. */
-trieNode *trieReallocForData(trieNode *n, void *data) {
+radtreeNode *radtreeReallocForData(radtreeNode *n, void *data) {
     if (data == NULL) return n; /* No reallocation needed, setting isnull=1 */
-    size_t curlen = trieNodeCurrentLength(n);
+    size_t curlen = radtreeNodeCurrentLength(n);
     return realloc(n,curlen+sizeof(void*));
 }
 
 /* Set the node auxiliary data to the specified pointer. */
-void trieSetData(trieNode *n, void *data) {
+void radtreeSetData(radtreeNode *n, void *data) {
     n->iskey = 1;
     if (data != NULL) {
-        void **ndata =(void**)((char*)n+trieNodeCurrentLength(n)-sizeof(void*));
+        void **ndata = (void**)
+            ((char*)n+radtreeNodeCurrentLength(n)-sizeof(void*));
         *ndata = data;
         n->isnull = 0;
     } else {
@@ -136,23 +138,23 @@ void trieSetData(trieNode *n, void *data) {
 }
 
 /* Get the node auxiliary data. */
-void *trieGetData(trieNode *n) {
+void *radtreeGetData(radtreeNode *n) {
     if (n->isnull) return NULL;
-    void **ndata =(void**)((char*)n+trieNodeCurrentLength(n)-sizeof(void*));
+    void **ndata =(void**)((char*)n+radtreeNodeCurrentLength(n)-sizeof(void*));
     return *ndata;
 }
 
 /* Add a new child to the node 'n' representing the character
  * 'c' and return its new pointer, as well as the child pointer
  * by reference. */
-trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
+radtreeNode *radtreeAddChild(radtreeNode *n, char c, radtreeNode **childptr) {
     assert(n->iscompr == 0);
-    size_t curlen = sizeof(trieNode)+
+    size_t curlen = sizeof(radtreeNode)+
                     n->size+
-                    sizeof(trieNode*)*n->size;
+                    sizeof(radtreeNode*)*n->size;
     size_t newlen;
     if (n->iskey) curlen += sizeof(void*);
-    newlen = curlen+sizeof(trieNode*)+1; /* Add 1 char and 1 pointer. */
+    newlen = curlen+sizeof(radtreeNode*)+1; /* Add 1 char and 1 pointer. */
     n = realloc(n,newlen);
 
     /* After the reallocation, we have 5/9 (depending on the system
@@ -166,7 +168,7 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
      * [numc][abc].[ap][bp][cp]|auxp|.... */
     memmove(n->data+n->size+1,
             n->data+n->size,
-            curlen-sizeof(trieNode)-n->size);
+            curlen-sizeof(radtreeNode)-n->size);
 
     /* Now, if present, move auxiliary data pointer at the end
      * so that we can store the additional child pointer without
@@ -174,8 +176,8 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
      *
      * [numc][abc].[ap][bp][cp]....|auxp| */
     if (n->iskey) {
-        memmove(n->data+newlen-sizeof(trieNode)-sizeof(void*),
-                n->data+newlen-sizeof(trieNode)-sizeof(void*)*2,
+        memmove(n->data+newlen-sizeof(radtreeNode)-sizeof(void*),
+                n->data+newlen-sizeof(radtreeNode)-sizeof(void*)*2,
                 sizeof(void*));
     }
 
@@ -183,9 +185,9 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
      *
      * [numc][abcd][ap][bp][cp]....|auxp|
      * [numc][abcd][ap][bp][cp][dp]|auxp| */
-    trieNode *child = trieNewNode(0);
+    radtreeNode *child = radtreeNewNode(0);
     n->data[n->size] = c;
-    memcpy(n->data+n->size+1+sizeof(trieNode*)*n->size,
+    memcpy(n->data+n->size+1+sizeof(radtreeNode*)*n->size,
            &child,sizeof(void*));
     n->size++;
     *childptr = child;
@@ -194,11 +196,11 @@ trieNode *trieAddChild(trieNode *n, char c, trieNode **childptr) {
 
 /* Return the pointer to the last child pointer in a node. For the compressed
  * nodes this is the only child pointer. */
-trieNode **trieNodeLastChildPtr(trieNode *n) {
+radtreeNode **radtreeNodeLastChildPtr(radtreeNode *n) {
     char *p = (char*)n;
-    p += trieNodeCurrentLength(n) - sizeof(trieNode*);
+    p += radtreeNodeCurrentLength(n) - sizeof(radtreeNode*);
     if (n->iskey && !n->isnull) p -= sizeof(void*);
-    return (trieNode**)p;
+    return (radtreeNode**)p;
 }
 
 /* Turn the node 'n', that must be a node without any children, into a
@@ -209,16 +211,16 @@ trieNode **trieNodeLastChildPtr(trieNode *n) {
  * The function also returns a child node, since the last node of the
  * compressed chain cannot be part of the chain: it has zero children while
  * we can only compress inner nodes with exactly one child each. */
-trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode **child){
+radtreeNode *radtreeCompressNode(radtreeNode *n, unsigned char *s, size_t len, radtreeNode **child) {
     assert(n->size == 0 && n->iscompr == 0);
     void *data = NULL; /* Initialized only to avoid warnings. */
     size_t newsize;
 
     debugf("Compress node: %.*s\n", (int)len,s);
 
-    newsize = sizeof(trieNode)+len+sizeof(trieNode*);
+    newsize = sizeof(radtreeNode)+len+sizeof(radtreeNode*);
     if (n->iskey) {
-        data = trieGetData(n); /* To restore it later. */
+        data = radtreeGetData(n); /* To restore it later. */
         if (!n->isnull) newsize += sizeof(void*);
     }
 
@@ -226,9 +228,9 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
     n->iscompr = 1;
     n->size = len;
     memcpy(n->data,s,len);
-    if (n->iskey) trieSetData(n,data);
-    trieNode **childfield = trieNodeLastChildPtr(n);
-    *child = trieNewNode(0);
+    if (n->iskey) radtreeSetData(n,data);
+    radtreeNode **childfield = radtreeNodeLastChildPtr(n);
+    *child = radtreeNewNode(0);
     *childfield = *child;
     return n;
 }
@@ -247,9 +249,9 @@ trieNode *trieCompressNode(trieNode *n, unsigned char *s, size_t len, trieNode *
  * search stopped in a compressed node, '*splitpos' returns the index
  * inside the compressed node where the search ended. This is ussful to
  * know where to split the node for insertion. */
-static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieNode **stopnode, trieNode ***plink, int *splitpos, trieStack *ts) {
-    trieNode *h = trie->head;
-    trieNode **parentlink = &trie->head;
+static inline size_t radtreeLowWalk(radtree *radtree, unsigned char *s, size_t len, radtreeNode **stopnode, radtreeNode ***plink, int *splitpos, radtreeStack *ts) {
+    radtreeNode *h = radtree->head;
+    radtreeNode **parentlink = &radtree->head;
 
     size_t i = 0; /* Position in the string. */
     size_t j = 0; /* Position in the node children / bytes (if compressed). */
@@ -270,8 +272,8 @@ static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieN
             i++;
         }
 
-        if (ts) trieStackPush(ts,h); /* Save stack of parent nodes. */
-        trieNode **children = (trieNode**)(h->data+h->size);
+        if (ts) radtreeStackPush(ts,h); /* Save stack of parent nodes. */
+        radtreeNode **children = (radtreeNode**)(h->data+h->size);
         if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
         h = children[j];
         parentlink = &children[j];
@@ -286,16 +288,16 @@ static inline size_t trieLowWalk(trie *trie, unsigned char *s, size_t len, trieN
  * the pointer 'data'. If the element is already present, the associated
  * data is updated, and 0 is returned, otherwise the element is inserted
  * and 1 is returned. */
-int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
+int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
     size_t i;
-    int j = 0; /* Split position. If trieLowWalk() stops in a compressed node,
-                  the index 'j' represents the char we stopped within the
+    int j = 0; /* Split position. If radtreeLowWalk() stops in a compressed
+                  node, the index 'j' represents the char we stopped within the
                   compressed node, that is, the position where to split the
                   node for insertion. */
-    trieNode *h, **parentlink;
+    radtreeNode *h, **parentlink;
 
     debugf("### Insert %.*s with value %p\n", (int)len, s, data);
-    i = trieLowWalk(trie,s,len,&h,&parentlink,&j,NULL);
+    i = radtreeLowWalk(radtree,s,len,&h,&parentlink,&j,NULL);
 
     /* If i == len we walked following the whole string. If we are not
      * in the middle of a compressed node, the string is either already
@@ -304,12 +306,12 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
      * data pointer. */
     if (i == len && (!h->iscompr || j == h->size)) {
         if (h->iskey) {
-            trieSetData(h,data);
+            radtreeSetData(h,data);
             return 0; /* Element already exists. */
         }
-        h = trieReallocForData(h,data);
+        h = radtreeReallocForData(h,data);
         *parentlink = h;
-        trieSetData(h,data);
+        radtreeSetData(h,data);
         return 1; /* Element inserted. */
     }
 
@@ -446,70 +448,71 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         debugf("Other (key) letter is '%c'\n", s[i]);
 
         /* 1: Save next pointer. */
-        trieNode **childfield = trieNodeLastChildPtr(h);
-        trieNode *next = *childfield;
+        radtreeNode **childfield = radtreeNodeLastChildPtr(h);
+        radtreeNode *next = *childfield;
         debugf("Next is %p\n", (void*)next);
         debugf("iskey %d\n", h->iskey);
         if (h->iskey) {
-            debugf("key value is %p\n", trieGetData(h));
+            debugf("key value is %p\n", radtreeGetData(h));
         }
 
         /* 2: Create the split node. */
-        trieNode *splitnode = trieNewNode(1);
+        radtreeNode *splitnode = radtreeNewNode(1);
         splitnode->data[0] = h->data[j];
 
         if (j == 0) {
             /* 3a: Replace the old node with the split node. */
             if (h->iskey) {
-                void *ndata = trieGetData(h);
-                splitnode = trieReallocForData(splitnode,ndata);
-                trieSetData(splitnode,ndata);
+                void *ndata = radtreeGetData(h);
+                splitnode = radtreeReallocForData(splitnode,ndata);
+                radtreeSetData(splitnode,ndata);
             }
             *parentlink = splitnode;
         } else {
             /* 3b: Trim the compressed node. */
-            size_t nodesize = sizeof(trieNode)+j+sizeof(trieNode*);
+            size_t nodesize = sizeof(radtreeNode)+j+sizeof(radtreeNode*);
             if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-            trieNode *trimmed = malloc(nodesize);
+            radtreeNode *trimmed = malloc(nodesize);
             trimmed->size = j;
             memcpy(trimmed->data,h->data,j);
             trimmed->iscompr = j > 1 ? 1 : 0;
             trimmed->iskey = h->iskey;
             trimmed->isnull = h->isnull;
             if (h->iskey && !h->isnull) {
-                void *ndata = trieGetData(h);
-                trieSetData(trimmed,ndata);
+                void *ndata = radtreeGetData(h);
+                radtreeSetData(trimmed,ndata);
             }
-            trieNode **cp = trieNodeLastChildPtr(trimmed);
+            radtreeNode **cp = radtreeNodeLastChildPtr(trimmed);
             *cp = splitnode;
             *parentlink = trimmed;
             parentlink = cp; /* Set parentlink to splitnode parent. */
-            trie->numnodes++;
+            radtree->numnodes++;
         }
 
         /* 4: Create the postfix node: what remains of the original
          * compressed node after the split. */
         size_t postfixlen = h->size - j - 1;
-        trieNode *postfix;
+        radtreeNode *postfix;
         if (postfixlen) {
             /* 4a: create a postfix node. */
-            size_t nodesize = sizeof(trieNode)+postfixlen+sizeof(trieNode*);
+            size_t nodesize = sizeof(radtreeNode)+postfixlen+
+                              sizeof(radtreeNode*);
             postfix = malloc(nodesize);
             postfix->iskey = 0;
             postfix->isnull = 0;
             postfix->size = postfixlen;
             postfix->iscompr = postfixlen > 1;
             memcpy(postfix->data,h->data+j+1,postfixlen);
-            trieNode **cp = trieNodeLastChildPtr(postfix);
+            radtreeNode **cp = radtreeNodeLastChildPtr(postfix);
             *cp = next;
-            trie->numnodes++;
+            radtree->numnodes++;
         } else {
             /* 4b: just use next as postfix node. */
             postfix = next;
         }
 
         /* 5: Set splitnode first child as the postfix node. */
-        trieNode **splitchild = trieNodeLastChildPtr(splitnode);
+        radtreeNode **splitchild = radtreeNodeLastChildPtr(splitnode);
         *splitchild = postfix;
 
         /* 6. Continue insertion: this will cause the splitnode to
@@ -523,26 +526,26 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
             h->size, h->data, (void*)h);
 
         /* 1: Save next pointer. */
-        trieNode **childfield = trieNodeLastChildPtr(h);
-        trieNode *next = *childfield;
+        radtreeNode **childfield = radtreeNodeLastChildPtr(h);
+        radtreeNode *next = *childfield;
 
         /* 2: Create the postfix node. */
         size_t postfixlen = h->size - j;
-        size_t nodesize = sizeof(trieNode)+postfixlen+sizeof(trieNode*);
+        size_t nodesize = sizeof(radtreeNode)+postfixlen+sizeof(radtreeNode*);
         if (data != NULL) nodesize += sizeof(void*);
-        trieNode *postfix = malloc(nodesize);
+        radtreeNode *postfix = malloc(nodesize);
         postfix->size = postfixlen;
         postfix->iscompr = postfixlen > 1;
         memcpy(postfix->data,h->data+j,postfixlen);
-        trieSetData(postfix,data);
-        trieNode **cp = trieNodeLastChildPtr(postfix);
+        radtreeSetData(postfix,data);
+        radtreeNode **cp = radtreeNodeLastChildPtr(postfix);
         *cp = next;
-        trie->numnodes++;
+        radtree->numnodes++;
 
         /* 3: Trim the compressed node. */
-        nodesize = sizeof(trieNode)+j+sizeof(trieNode*);
+        nodesize = sizeof(radtreeNode)+j+sizeof(radtreeNode*);
         if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-        trieNode *trimmed = malloc(nodesize);
+        radtreeNode *trimmed = malloc(nodesize);
         trimmed->size = j;
         trimmed->iskey = 0;
         trimmed->isnull = 0;
@@ -550,14 +553,14 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         trimmed->iscompr = j > 1 ? 1 : 0;
         *parentlink = trimmed;
         if (h->iskey) {
-            void *aux = trieGetData(h);
-            trieSetData(trimmed,aux);
+            void *aux = radtreeGetData(h);
+            radtreeSetData(trimmed,aux);
         }
-        trie->numele++;
+        radtree->numele++;
 
         /* Fix the trimmed node child pointer to point to
          * the postfix node. */
-        cp = trieNodeLastChildPtr(trimmed);
+        cp = radtreeNodeLastChildPtr(trimmed);
         *cp = postfix;
 
         /* Finish! We don't need to contine with the insertion
@@ -565,13 +568,13 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         return 1; /* Key inserted. */
     }
 
-    /* We walked the trie as far as we could, but still there are left
+    /* We walked the radix tree as far as we could, but still there are left
      * chars in our string. We need to insert the missing nodes.
      * Note: while loop never entered if the node was split by ALGO2,
      * since i == len. */
     while(i < len) {
-        trieNode *child;
-        trie->numnodes++;
+        radtreeNode *child;
+        radtree->numnodes++;
 
         /* If this node is going to have a single child, and there
          * are other characters, so that that would result in a chain
@@ -579,39 +582,40 @@ int trieInsert(trie *trie, unsigned char *s, size_t len, void *data) {
         if (h->size == 0 && len-i > 1) {
             debugf("Inserting compressed node\n");
             size_t comprsize = len-i;
-            if (comprsize > TRIE_NODE_MAX_SIZE) comprsize = TRIE_NODE_MAX_SIZE;
-            h = trieCompressNode(h,s+i,comprsize,&child);
+            if (comprsize > RADTREE_NODE_MAX_SIZE)
+                comprsize = RADTREE_NODE_MAX_SIZE;
+            h = radtreeCompressNode(h,s+i,comprsize,&child);
             *parentlink = h;
-            parentlink = trieNodeLastChildPtr(h);
+            parentlink = radtreeNodeLastChildPtr(h);
             i += comprsize;
         } else {
             debugf("Inserting normal node\n");
-            h = trieAddChild(h,s[i],&child);
-            trieNode **children = (trieNode**)(h->data+h->size);
+            h = radtreeAddChild(h,s[i],&child);
+            radtreeNode **children = (radtreeNode**)(h->data+h->size);
             *parentlink = h;
             parentlink = &children[h->size-1];
             i++;
         }
         h = child;
     }
-    if (!h->iskey) trie->numele++;
-    h = trieReallocForData(h,data);
-    trieSetData(h,data);
+    if (!h->iskey) radtree->numele++;
+    h = radtreeReallocForData(h,data);
+    radtreeSetData(h,data);
     *parentlink = h;
     return 1; /* Element inserted. */
 }
 
-/* Find a key in the trie, returns trieNotFound special void pointer value
+/* Find a key in the radtree, returns radtreeNotFound special void pointer value
  * if the item was not found, otherwise the value associated with the
  * item is returned. */
-void *trieFind(trie *trie, unsigned char *s, size_t len) {
-    trieNode *h;
+void *radtreeFind(radtree *radtree, unsigned char *s, size_t len) {
+    radtreeNode *h;
 
     debugf("### Lookup: %.*s\n", (int)len, s);
-    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL,NULL);
-    if (i != len) return trieNotFound;
+    size_t i = radtreeLowWalk(radtree,s,len,&h,NULL,NULL,NULL);
+    if (i != len) return radtreeNotFound;
     debugf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
-    return h->iskey ? trieGetData(h) : trieNotFound;
+    return h->iskey ? radtreeGetData(h) : radtreeNotFound;
 }
 
 /* Return the memory address where the 'parent' node stores the specified
@@ -619,8 +623,8 @@ void *trieFind(trie *trie, unsigned char *s, size_t len) {
  * one if needed. The function assumes it will find a match, otherwise the
  * operation is an undefined behavior (it will continue scanning the
  * memory without any bound checking). */
-trieNode **trieFindParentLink(trieNode *parent, trieNode *child) {
-    trieNode **cp = trieNodeLastChildPtr(parent);
+radtreeNode **radtreeFindParentLink(radtreeNode *parent, radtreeNode *child) {
+    radtreeNode **cp = radtreeNodeLastChildPtr(parent);
     if (!parent->iscompr) cp -= (parent->size-1);
     while(*cp != child) cp++;
     return cp;
@@ -629,19 +633,19 @@ trieNode **trieFindParentLink(trieNode *parent, trieNode *child) {
 /* Low level child removal from node. The new node pointer (after the child
  * removal) is returned. Note that this function does not fix the pointer
  * of the node in its parent, so this task is up to the caller. */
-trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
-    debugnode("trieRemoveChild before", parent);
+radtreeNode *radtreeRemoveChild(radtreeNode *parent, radtreeNode *child) {
+    debugnode("radtreeRemoveChild before", parent);
     /* If parent is a compressed node (having a single child, as for definition
      * of the data structure), the removal of the child consists into turning
      * it into a normal node without children. */
     if (parent->iscompr) {
-        trieNode *newnode = trieNewNode(0);
+        radtreeNode *newnode = radtreeNewNode(0);
         if (parent->iskey) {
-            void *data = trieGetData(parent);
-            newnode = trieReallocForData(newnode,data);
-            trieSetData(newnode,data);
+            void *data = radtreeGetData(parent);
+            newnode = radtreeReallocForData(newnode,data);
+            radtreeSetData(newnode,data);
         }
-        debugnode("trieRemoveChild after", newnode);
+        debugnode("radtreeRemoveChild after", newnode);
         return newnode;
     }
 
@@ -650,8 +654,8 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
      *
      * 1. To start we seek the first element in both the children
      *    pointers and edge bytes in the node. */
-    trieNode **cp = trieNodeLastChildPtr(parent) - (parent->size-1);
-    trieNode **c = cp;
+    radtreeNode **cp = radtreeNodeLastChildPtr(parent) - (parent->size-1);
+    radtreeNode **c = cp;
     unsigned char *e = parent->data;
 
     /* 2. Search the child pointer to remove inside the array of children
@@ -664,23 +668,23 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
     /* 3. Remove the edge and the pointer by memmoving the remaining children
      *    pointer and edge bytes one position before. */
     int taillen = parent->size - (e - parent->data) - 1;
-    debugf("trieRemoveChild tail len: %d\n", taillen);
+    debugf("radtreeRemoveChild tail len: %d\n", taillen);
     memmove(e,e+1,taillen);
 
     /* Since we have one data byte less, also child pointers start one byte
      * before now. */
-    memmove(((char*)cp)-1,cp,(parent->size - taillen - 1)*sizeof(trieNode**));
+    memmove(((char*)cp)-1,cp,(parent->size-taillen-1)*sizeof(radtreeNode**));
 
     /* Move the remaining "tail" pointer at the right position as well. */
-    memmove(((char*)c)-1,c+1,taillen*sizeof(trieNode**));
+    memmove(((char*)c)-1,c+1,taillen*sizeof(radtreeNode**));
 
     /* 4. Update size. */
     parent->size--;
 
     /* Realloc the node according to the theoretical memory usage, to free
      * data if we are over-allocating right now. */
-    trieNode *newnode = realloc(parent,trieNodeCurrentLength(parent));
-    debugnode("trieRemoveChild after", newnode);
+    radtreeNode *newnode = realloc(parent,radtreeNodeCurrentLength(parent));
+    debugnode("radtreeRemoveChild after", newnode);
     /* Note: if realloc() fails we just return the old address, which
      * is valid. */
     return newnode ? newnode : parent;
@@ -688,15 +692,15 @@ trieNode *trieRemoveChild(trieNode *parent, trieNode *child) {
 
 /* Remove the specified item. Returns 1 if the item was found and
  * deleted, 0 otherwise. */
-int trieRemove(trie *trie, unsigned char *s, size_t len) {
-    trieNode *h;
-    trieStack ts;
+int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
+    radtreeNode *h;
+    radtreeStack ts;
 
     debugf("### Delete: %.*s\n", (int)len, s);
-    trieStackInit(&ts);
-    size_t i = trieLowWalk(trie,s,len,&h,NULL,NULL,&ts);
+    radtreeStackInit(&ts);
+    size_t i = radtreeLowWalk(radtree,s,len,&h,NULL,NULL,&ts);
     if (i != len || !h->iskey) {
-        trieStackFree(&ts);
+        radtreeStackFree(&ts);
         return 0;
     }
     h->iskey = 0;
@@ -704,18 +708,18 @@ int trieRemove(trie *trie, unsigned char *s, size_t len) {
     /* If this node has no children, the deletion needs to reclaim the
      * no longer used nodes. This is an iterative process that needs to
      * walk the three upward, deleting all the nodes with just one child
-     * that are not keys, until the head of the trie is reached or the first
+     * that are not keys, until the head of the radtree is reached or the first
      * node with more than one child is found. */
     if (h->size == 0) {
         debugf("Key deleted in node without children. Cleanup needed.\n");
-        trieNode *child = NULL;
-        while(h != trie->head) {
+        radtreeNode *child = NULL;
+        while(h != radtree->head) {
             child = h;
             debugf("Freeing child %p [%.*s] key:%d\n", (void*)child,
                 (int)child->size, (char*)child->data, child->iskey);
             free(child);
-            trie->numnodes--;
-            h = trieStackPop(&ts);
+            radtree->numnodes--;
+            h = radtreeStackPop(&ts);
              /* If this node has more then one child, or actually holds
               * a key, stop here. */
             if (h->iskey || (!h->iscompr && h->size != 1)) break;
@@ -723,14 +727,14 @@ int trieRemove(trie *trie, unsigned char *s, size_t len) {
         if (child) {
             debugf("Unlinking child %p from parent %p\n",
                 (void*)child, (void*)h);
-            trieNode *new = trieRemoveChild(h,child);
+            radtreeNode *new = radtreeRemoveChild(h,child);
             if (new != h) {
-                trieNode *parent = trieStackPop(&ts);
-                trieNode **parentlink;
+                radtreeNode *parent = radtreeStackPop(&ts);
+                radtreeNode **parentlink;
                 if (parent == NULL) {
-                    parentlink = &trie->head;
+                    parentlink = &radtree->head;
                 } else {
-                    parentlink = trieFindParentLink(parent,h);
+                    parentlink = radtreeFindParentLink(parent,h);
                 }
                 *parentlink = new;
             }
@@ -742,8 +746,34 @@ int trieRemove(trie *trie, unsigned char *s, size_t len) {
             }
         }
     }
-    trieStackFree(&ts);
+
+    /* XXX: If the node had just one child, after the removal of the key
+     * further compression with adjacent nodes is pontentially possible. */
+    if (h->size == 1) {
+    }
+    radtreeStackFree(&ts);
     return 1;
+}
+
+/* This is the core of radtreeFree(): performs a depth-first scan of the
+ * tree and releases all the nodes found. */
+void radtreeRecursiveFree(radtree *radtree, radtreeNode *n) {
+    int numchildren = n->iscompr ? 1 : n->size;
+    radtreeNode **cp = radtreeNodeLastChildPtr(n);
+    while(numchildren--) {
+        radtreeRecursiveFree(radtree,*cp);
+        cp--;
+    }
+    debugnode("free depth-first",n);
+    free(n);
+    radtree->numnodes--;
+}
+
+/* Free a whole radix tree. */
+void radtreeFree(radtree *radtree) {
+    radtreeRecursiveFree(radtree,radtree->head);
+    assert(radtree->numnodes == 0);
+    free(radtree);
 }
 
 #ifdef BENCHMARK_MAIN
@@ -762,13 +792,13 @@ long long ustime(void) {
 }
 
 int main(void) {
-    trie *t = trieNew();
+    radtree *t = radtreeNew();
 
     long long start = ustime();
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i);
-        trieInsert(t,(unsigned char*)buf,len,(void*)(long)i);
+        radtreeInsert(t,(unsigned char*)buf,len,(void*)(long)i);
     }
     printf("Insert: %f\n", (double)(ustime()-start)/1000000);
 
@@ -776,7 +806,7 @@ int main(void) {
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i);
-        void *data = trieFind(t,(unsigned char*)buf,len);
+        void *data = radtreeFind(t,(unsigned char*)buf,len);
         if (data != (void*)(long)i) {
             printf("Issue with %s\n", buf);
         }
@@ -788,7 +818,7 @@ int main(void) {
         char buf[64];
         int r = rand() % 5000000;
         int len = snprintf(buf,sizeof(buf),"%d",r);
-        void *data = trieFind(t,(unsigned char*)buf,len);
+        void *data = radtreeFind(t,(unsigned char*)buf,len);
         if (data != (void*)(long)r) {
             printf("Issue with %s\n", buf);
         }
@@ -800,13 +830,18 @@ int main(void) {
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
         int len = snprintf(buf,sizeof(buf),"%d",i+5000000);
-        void *data = trieFind(t,(unsigned char*) buf,len);
+        void *data = radtreeFind(t,(unsigned char*) buf,len);
         if (data != (void*)(long)i) count++;
     }
     printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);
     printf("%llu total elements\n", (unsigned long long)t->numele);
+
+    start = ustime();
+    radtreeFree(t);
+    printf("Tree release: %f\n", (double)(ustime()-start)/1000000);
+
     return 0;
 }
 #endif
@@ -815,28 +850,29 @@ int main(void) {
 #include <stdio.h>
 
 int main(void) {
-    printf("notfound = %p\n", trieNotFound);
-    trie *t = trieNew();
-    #if 0
-    trieInsert(t,(unsigned char*)"a",1,(void*)1);
-    printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
-    trieInsert(t,(unsigned char*)"annibale",8,(void*)2);
-    printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
-    printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
-    trieInsert(t,(unsigned char*)"annientare",10,(void*)3);
-    printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
-    trieRemove(t,(unsigned char*)"a",1);
-    trieRemove(t,(unsigned char*)"annientare",10);
-    printf("a = %p\n", trieFind(t,(unsigned char*)"a",1));
-    printf("annientare = %p\n", trieFind(t,(unsigned char*)"annientare",10));
-    printf("annibale = %p\n", trieFind(t,(unsigned char*)"annibale",8));
+    printf("notfound = %p\n", radtreeNotFound);
+    radtree *t = radtreeNew();
+    #if 1
+    radtreeInsert(t,(unsigned char*)"a",1,(void*)1);
+    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
+    radtreeInsert(t,(unsigned char*)"annibale",8,(void*)2);
+    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
+    printf("annibale = %p\n", radtreeFind(t,(unsigned char*)"annibale",8));
+    radtreeInsert(t,(unsigned char*)"annientare",10,(void*)3);
+    printf("annientare = %p\n", radtreeFind(t,(unsigned char*)"annientare",10));
+    radtreeRemove(t,(unsigned char*)"a",1);
+    radtreeRemove(t,(unsigned char*)"annientare",10);
+    printf("a = %p\n", radtreeFind(t,(unsigned char*)"a",1));
+    printf("annientare = %p\n", radtreeFind(t,(unsigned char*)"annientare",10));
+    printf("annibale = %p\n", radtreeFind(t,(unsigned char*)"annibale",8));
+    radtreeFree(t);
     #else
-    trieInsert(t,(unsigned char*)"foobar",6,(void*)1);
-    trieInsert(t,(unsigned char*)"foo",3,(void*)2);
-    trieInsert(t,(unsigned char*)"foob",4,(void*)3);
-    printf("foobar = %p\n", trieFind(t,(unsigned char*)"foobar",6));
-    printf("foo = %p\n", trieFind(t,(unsigned char*)"foo",3));
-    printf("foob = %p\n", trieFind(t,(unsigned char*)"foob",4));
+    radtreeInsert(t,(unsigned char*)"foobar",6,(void*)1);
+    radtreeInsert(t,(unsigned char*)"foo",3,(void*)2);
+    radtreeInsert(t,(unsigned char*)"foob",4,(void*)3);
+    printf("foobar = %p\n", radtreeFind(t,(unsigned char*)"foobar",6));
+    printf("foo = %p\n", radtreeFind(t,(unsigned char*)"foo",3));
+    printf("foob = %p\n", radtreeFind(t,(unsigned char*)"foob",4));
     #endif
 }
 #endif

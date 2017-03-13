@@ -8,10 +8,7 @@
 * Make the code alignment-safe.
 * Handle OOM everywhere. Consider a define to switch checking off if it has
   a measurable performance cost.
-* Change function prefix trie...() into radtree()...
 * All the low level node management functions should be called radtreeNode...()
-* radtreeFree() API to remove a whole radix tree. It's a simple recursive
-  function visiting all the nodes depth-first, and freeing them.
 * Write a complete unit test, testing with gcov that coverage is 100%.
 * Write a fuzzer.
 * Make sure nodes and keys counting is always updated.
