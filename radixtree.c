@@ -121,13 +121,11 @@ radtree *radtreeNew(void) {
 }
 
 /* Return the current total size of the node. */
-size_t radtreeNodeCurrentLength(radtreeNode *n) {
-    size_t curlen = sizeof(radtreeNode)+n->size;
-    curlen += n->iscompr ? sizeof(radtreeNode*) :
-                           sizeof(radtreeNode*)*n->size;
-    if (n->iskey && !n->isnull) curlen += sizeof(void*);
-    return curlen;
-}
+#define radtreeNodeCurrentLength(n) ( \
+    sizeof(radtreeNode)+(n)->size+ \
+    ((n)->iscompr ? sizeof(radtreeNode*) : sizeof(radtreeNode*)*(n)->size)+ \
+    (((n)->iskey && !(n)->isnull)*sizeof(void*)) \
+)
 
 /* Realloc the node to make room for auxiliary data in order
  * to store an item in that node. */
