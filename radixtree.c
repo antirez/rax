@@ -1025,6 +1025,15 @@ int main(void) {
     printf("Random lookup: %f\n", (double)(ustime()-start)/1000000);
 
     start = ustime();
+    for (int i = 0; i < 5000000; i++) {
+        char buf[64];
+        int len = snprintf(buf,sizeof(buf),"%d",i);
+        int retval = radtreeRemove(t,(unsigned char*)buf,len);
+        assert(retval == 1);
+    }
+    printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
+
+    start = ustime();
     int count = 0;
     for (int i = 0; i < 5000000; i++) {
         char buf[64];
@@ -1037,10 +1046,7 @@ int main(void) {
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);
     printf("%llu total elements\n", (unsigned long long)t->numele);
 
-    start = ustime();
     radtreeFree(t);
-    printf("Tree release: %f\n", (double)(ustime()-start)/1000000);
-
     return 0;
 }
 #endif
