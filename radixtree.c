@@ -861,8 +861,9 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 memcpy(new->data+comprsize,h->data,h->size);
                 comprsize += h->size;
                 radtreeNode **cp = radtreeNodeLastChildPtr(h);
-                free(h); radtree->numnodes--;
+                radtreeNode *tofree = h;
                 h = *cp;
+                free(tofree); radtree->numnodes--;
                 if (h->iskey || (!h->iscompr && h->size != 1)) break;
             }
             radtreeDebugShowNode("New node",new);
