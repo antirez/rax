@@ -814,9 +814,9 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
      * "FOOBAR" -> [] (1)
      */
     if (trycompress) {
-        printf("After removing %.*s:\n", (int)len, s);
-        radtreeDebugShowNode("Compression may be needed",h);
-        printf("Seek start node\n");
+        debugf("After removing %.*s:\n", (int)len, s);
+        debugnode("Compression may be needed",h);
+        debugf("Seek start node\n");
 
         /* Try to reach the upper node that is compressible.
          * At the end of the loop 'h' will point to the first node we
@@ -827,7 +827,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
             if (!parent || parent->iskey ||
                 (!parent->iscompr && parent->size != 1)) break;
             h = parent;
-            radtreeDebugShowNode("Going up to",h);
+            debugnode("Going up to",h);
         }
         radtreeNode *start = h; /* Compression starting node. */
 
@@ -866,7 +866,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 free(tofree); radtree->numnodes--;
                 if (h->iskey || (!h->iscompr && h->size != 1)) break;
             }
-            radtreeDebugShowNode("New node",new);
+            debugnode("New node",new);
 
             /* Now 'h' points to the first node that we still need to use,
              * so our new node child pointer will point to it. */
@@ -881,7 +881,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 radtree->head = new;
             }
 
-            printf("Compressed %d nodes, %d total bytes\n",
+            debugf("Compressed %d nodes, %d total bytes\n",
                 nodes, (int)comprsize);
         }
     }
