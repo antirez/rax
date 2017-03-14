@@ -59,7 +59,8 @@
  *          "footer" []          [] "foobar"
  *
  * Similarly after deletion, if a new chain of nodes having a single child
- * is created, it must be compressed back into a single node.
+ * is created (the chain must also not include nodes that represent keys),
+ * it must be compressed back into a single node.
  *
  */
 

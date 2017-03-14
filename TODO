@@ -1,3 +1,8 @@
+* Have functions to:
+    1. Directly replace a child pointer of a node with a new one:
+        radtreeUpdateChildPointer(parent,oldchild,newchild);
+    2. Directly set the last child pointer:
+        radtreeSetLastChildPointer(node,childptr);
 * Insert new nodes in-place, so that the string of characters inside a node
   is taken sorted, and we can use binary search or just stop scanning
   once a char greater than the one we are looking for is found.
@@ -12,6 +17,8 @@
 * Write a complete unit test, testing with gcov that coverage is 100%.
 * Write a fuzzer.
 * Make sure nodes and keys counting is always updated.
+* Check if reclaiming nodes from first to last child is a performance
+  improvement.
 * Add an interator: radtreeSeek() to start the iteration at a given element
   (should support and start and stop point, inclusive and exclsive both sides,
    and should be able to see at the start or end of the range. Moreover there

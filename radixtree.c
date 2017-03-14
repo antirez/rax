@@ -4,6 +4,24 @@
 #include <stdio.h>
 #include "radixtree.h"
 
+/* This is a special pointer that is guaranteed to never have the same value
+ * of a radix tree node. It's used in order to report "not found" error without
+ * requiring the function to have multiple return values. */
+void *radtreeNotFound = (void*)"radtree-not-found-pointer";
+
+/* -------------------------------- Debugging ------------------------------ */
+
+/* Used by debugnode() macro to show info about a given node. */
+radtreeNode **radtreeNodeLastChildPtr(radtreeNode *n);
+void radtreeDebugShowNode(const char *msg, radtreeNode *n) {
+    printf("%s: %p [%.*s] key:%d size:%d children:",
+        msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);
+    int numcld = n->iscompr ? 1 : n->size;
+    radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);
+    while(numcld--) printf("%p ", (void*)*(cldptr++));
+    printf("\n");
+}
+
 /* Turn debugging messages on/off. */
 #if 0
 #define debugf(...)                                                            \
@@ -11,24 +29,12 @@
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
         printf(__VA_ARGS__);                                                   \
     } while (0);
-#define debugnode(msg,n)                                                       \
-    do {                                                                       \
-        printf("%s: %p [%.*s] key:%d size:%d children:",                       \
-            msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);   \
-        int numcld = n->iscompr ? 1 : n->size;                                 \
-        radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);        \
-        while(numcld--) printf("%p ", (void*)*(cldptr++));                     \
-        printf("\n");                                                          \
-    } while (0);
+
+#define debugnode(msg,n) radtreeDebugShowNode(msg,n)
 #else
 #define debugf(...)
 #define debugnode(msg,n)
 #endif
-
-/* This is a special pointer that is guaranteed to never have the same value
- * of a radix tree node. It's used in order to report "not found" error without
- * requiring the function to have multiple return values. */
-void *radtreeNotFound = (void*)"radtree-not-found-pointer";
 
 /* ------------------------- radtreeStack functions --------------------------
  * The radtreeStack is a simple stack of pointers that is capable of switching
@@ -75,6 +81,13 @@ static inline void *radtreeStackPop(radtreeStack *ts) {
     if (ts->items == 0) return NULL;
     ts->items--;
     return ts->stack[ts->items];
+}
+
+/* Return the stack item at the top of the stack without actually consuming
+ * it. */
+static inline void *radtreeStackPeek(radtreeStack *ts) {
+    if (ts->items == 0) return NULL;
+    return ts->stack[ts->items-1];
 }
 
 /* Free the stack in case we used heap allocation. */
@@ -704,6 +717,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
         return 0;
     }
     h->iskey = 0;
+    radtree->numele--;
 
     /* If this node has no children, the deletion needs to reclaim the
      * no longer used nodes. This is an iterative process that needs to
@@ -733,7 +747,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 (void*)child, (void*)h);
             radtreeNode *new = radtreeRemoveChild(h,child);
             if (new != h) {
-                radtreeNode *parent = radtreeStackPop(&ts);
+                radtreeNode *parent = radtreeStackPeek(&ts);
                 radtreeNode **parentlink;
                 if (parent == NULL) {
                     parentlink = &radtree->head;
@@ -800,7 +814,75 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
      * "FOOBAR" -> [] (1)
      */
     if (trycompress) {
-        debugnode("Attempt compression starting from",h);
+        printf("After removing %.*s:\n", (int)len, s);
+        radtreeDebugShowNode("Compression may be needed",h);
+        printf("Seek start node\n");
+
+        /* Try to reach the upper node that is compressible.
+         * At the end of the loop 'h' will point to the first node we
+         * can try to compress and 'parent' to its parent. */
+        radtreeNode *parent;
+        while(1) {
+            parent = radtreeStackPop(&ts);
+            if (!parent || parent->iskey ||
+                (!parent->iscompr && parent->size != 1)) break;
+            h = parent;
+            radtreeDebugShowNode("Going up to",h);
+        }
+        radtreeNode *start = h; /* Compression starting node. */
+
+        /* Scan chain of nodes we can compress. */
+        size_t comprsize = h->size;
+        int nodes = 1;
+        while(h->size != 0) {
+            radtreeNode **cp = radtreeNodeLastChildPtr(h);
+            h = *cp;
+            if (h->iskey || (!h->iscompr && h->size != 1)) break;
+            nodes++;
+            comprsize += h->size;
+        }
+        if (nodes > 1) {
+            /* If we can compress, create the new node and populate it. */
+            size_t nodesize =
+                sizeof(radtreeNode)+comprsize+sizeof(radtreeNode*);
+            radtreeNode *new = malloc(nodesize);
+            new->iskey = 0;
+            new->isnull = 0;
+            new->iscompr = 1;
+            new->size = comprsize;
+            radtree->numnodes++;
+
+            /* Scan again, this time to populate the new node content and
+             * to fix the new node child pointer. At the same time we free
+             * all the nodes that we'll no longer use. */
+            comprsize = 0;
+            h = start;
+            while(h->size != 0) {
+                memcpy(new->data+comprsize,h->data,h->size);
+                comprsize += h->size;
+                radtreeNode **cp = radtreeNodeLastChildPtr(h);
+                free(h); radtree->numnodes--;
+                h = *cp;
+                if (h->iskey || (!h->iscompr && h->size != 1)) break;
+            }
+            radtreeDebugShowNode("New node",new);
+
+            /* Now 'h' points to the first node that we still need to use,
+             * so our new node child pointer will point to it. */
+            radtreeNode **cp = radtreeNodeLastChildPtr(new);
+            *cp = h;
+
+            /* Fix parent link. */
+            if (parent) {
+                radtreeNode **parentlink = radtreeFindParentLink(parent,start);
+                *parentlink = new;
+            } else {
+                radtree->head = new;
+            }
+
+            printf("Compressed %d nodes, %d total bytes\n",
+                nodes, (int)comprsize);
+        }
     }
 
     radtreeStackFree(&ts);
@@ -964,26 +1046,41 @@ int main(void) {
 
 #ifdef TEST_MAIN
 #include <stdio.h>
+#include <time.h>
 
 int main(void) {
     printf("notfound = %p\n", radtreeNotFound);
     radtree *t = radtreeNew();
-    #if 1
     char *toadd[] = {"romane","romanus","romulus","rubens","ruber","rubicon","rubicundus",NULL};
-    long i = 0;
-    while (toadd[i] != NULL) {
+
+    srand(time(NULL));
+    for (int x = 0; x < 10000; x++) rand();
+
+    long items = 0;
+    while(toadd[items] != NULL) items++;
+
+    for (long i = 0; i < items; i++)
         radtreeInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
-        i++;
+    radtreeShow(t);
+
+    int rnum = rand();
+    int survivor = rnum % items;
+
+#if 1
+    printf("Removing everything but %s in random order\n", toadd[survivor]);
+    for (long i = 0; i < 1000; i++) {
+        int r = rand() % items;
+        if (r == survivor) continue;
+        radtreeRemove(t,(unsigned char*)toadd[r],strlen(toadd[r]));
     }
-    #else
-    radtreeInsert(t,(unsigned char*)"foobar",6,(void*)1);
-    radtreeInsert(t,(unsigned char*)"foo",3,(void*)2);
-    radtreeInsert(t,(unsigned char*)"foob",4,(void*)3);
-    printf("foobar = %p\n", radtreeFind(t,(unsigned char*)"foobar",6));
-    printf("foo = %p\n", radtreeFind(t,(unsigned char*)"foo",3));
-    printf("foob = %p\n", radtreeFind(t,(unsigned char*)"foob",4));
-    radtreeRemove(t,(unsigned char*)"foo",3);
-    #endif
+#else
+    printf("Removing rubicon\n");
+    radtreeRemove(t,(unsigned char*)"rubicon",7);
+#endif
+
+    printf("%llu total nodes\n", (unsigned long long)t->numnodes);
+    printf("%llu total elements\n", (unsigned long long)t->numele);
+
     radtreeShow(t);
     radtreeFree(t);
 }
