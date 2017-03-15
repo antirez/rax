@@ -319,6 +319,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
         h = radtreeReallocForData(h,data);
         memcpy(parentlink,&h,sizeof(h));
         radtreeSetData(h,data);
+        radtree->numele++;
         return 1; /* Element inserted. */
     }
 
@@ -565,7 +566,6 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
             void *aux = radtreeGetData(h);
             radtreeSetData(trimmed,aux);
         }
-        radtree->numele++;
 
         /* Fix the trimmed node child pointer to point to
          * the postfix node. */
@@ -574,6 +574,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
 
         /* Finish! We don't need to contine with the insertion
          * algorithm for ALGO 2. The key is already inserted. */
+        radtree->numele++;
         return 1; /* Key inserted. */
     }
 
