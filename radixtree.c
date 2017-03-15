@@ -254,7 +254,7 @@ radtreeNode *radtreeCompressNode(radtreeNode *n, unsigned char *s, size_t len, r
  * '*stopnode' if the passed pointer is not NULL. This node link in the
  * parent's node is returned as '*plink' if not NULL. Finally, if the
  * search stopped in a compressed node, '*splitpos' returns the index
- * inside the compressed node where the search ended. This is ussful to
+ * inside the compressed node where the search ended. This is useful to
  * know where to split the node for insertion. */
 static inline size_t radtreeLowWalk(radtree *radtree, unsigned char *s, size_t len, radtreeNode **stopnode, radtreeNode ***plink, int *splitpos, radtreeStack *ts) {
     radtreeNode *h = radtree->head;

@@ -1,10 +1,3 @@
-* Have functions to:
-    1. Directly replace a child pointer of a node with a new one:
-        radtreeUpdateChildPointer(parent,oldchild,newchild);
-    2. Directly set the last child pointer:
-        radtreeSetLastChildPointer(node,childptr);
-    Hint: grep for all the '**cp' matches in the source code trying to
-    cleanup using the above two functions.
 * Insert new nodes in-place, so that the string of characters inside a node
   is taken sorted, and we can use binary search or just stop scanning
   once a char greater than the one we are looking for is found.
@@ -12,15 +5,13 @@
   feature to have for certain use cases.
 * Test the insertion of strings greater then 512 MB.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
-* Make the code alignment-safe. Check all the *cp / *parentlink deferences.
 * Handle OOM everywhere. Consider a define to switch checking off if it has
   a measurable performance cost.
 * All the low level node management functions should be called radtreeNode...()
 * Write a complete unit test, testing with gcov that coverage is 100%.
 * Write a fuzzer.
-* Make sure nodes and keys counting is always updated.
 * Check if reclaiming nodes from first to last child is a performance
-  improvement.
+  improvement in radtreeFree().
 * Add an interator: radtreeSeek() to start the iteration at a given element
   (should support and start and stop point, inclusive and exclsive both sides,
    and should be able to see at the start or end of the range. Moreover there
@@ -33,9 +24,17 @@
    radtreeIterator *iterator = radtreeSeek("abc",3,RADTREE_INCL,
                                            "xyz',3,RADTREE_EXCL,
                                            RADTREE_SEEK_START);
-   while(radtreeNext(iterator) != RADTREE_END) {
+   while(radtreeNext(iterator)) {
       printf("key: %.*s, val %p\n", (int)iterator->keylen,
                                     (char*)iterator->key,
                                     iterator->val);
    }
    radtreeFreeIterator(iterator);
+
+   Flags in iterator creation:
+
+   RADTREE_SEEK_START
+   RADTREE_SEEK_END
+   RADTREE_DEL_SAFE (Rescan the tree at every "next"/"prev" operation)
+
+* Random element function.
