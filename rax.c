@@ -148,10 +148,12 @@ void *raxGetData(raxNode *n) {
     return data;
 }
 
-/* Add a new child to the node 'n' representing the character
- * 'c' and return its new pointer, as well as the child pointer
- * by reference. */
-raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr) {
+/* Add a new child to the node 'n' representing the character 'c' and return
+ * its new pointer, as well as the child pointer by reference. Additionally
+ * '***parentlink' is populated with the raxNode pointer-to-pointer of where
+ * the new child was stored, which is useful for the caller to replace the
+ * child pointer if it gets reallocated. */
+raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr, raxNode ***parentlink) {
     assert(n->iscompr == 0);
     size_t curlen = sizeof(raxNode)+
                     n->size+
@@ -162,39 +164,57 @@ raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr) {
     n = realloc(n,newlen);
 
     /* After the reallocation, we have 5/9 (depending on the system
-     * pointer size) bytes at the end:
+     * pointer size) bytes at the end, that is, the additional char
+     * in the 'data' section, plus one pointer to the new child:
      *
-     * [numc][abc][ap][bp][cp]|auxp|.....
+     * [numc][abx][ap][bp][xp]|auxp|.....
      *
-     * Move all the tail pointers one byte on the left, to make
-     * space for another character in the chars vector:
-     *
-     * [numc][abc].[ap][bp][cp]|auxp|.... */
-    memmove(n->data+n->size+1,
-            n->data+n->size,
-            curlen-sizeof(raxNode)-n->size);
-
-    /* Now, if present, move auxiliary data pointer at the end
-     * so that we can store the additional child pointer without
-     * overwriting it:
-     *
-     * [numc][abc].[ap][bp][cp]....|auxp| */
-    if (n->iskey) {
-        memmove(n->data+newlen-sizeof(raxNode)-sizeof(void*),
-                n->data+newlen-sizeof(raxNode)-sizeof(void*)*2,
-                sizeof(void*));
+     * Let's find where to insert the new child in order to make sure
+     * it is inserted in-place lexicographically. */
+    int pos;
+    for (pos = 0; pos < n->size; pos++) {
+        if (n->data[pos] > c) break;
     }
 
-    /* We can now set the character and its child node pointer:
+    /* Now, if present, move auxiliary data pointer at the end
+     * so that we can mess with the other data without overwriting it.
+     * We will obtain something like that:
      *
-     * [numc][abcd][ap][bp][cp]....|auxp|
-     * [numc][abcd][ap][bp][cp][dp]|auxp| */
+     * [numc][abx][ap][bp][xp].....|auxp| */
+    unsigned char *src;
+    if (n->iskey && !n->isnull) {
+        src = n->data+n->size+sizeof(raxNode*)*n->size;
+        memmove(src+1+sizeof(raxNode*),src,sizeof(void*));
+    }
+
+    /* Now imagine we are adding a node with edge 'c'. The insertion
+     * point is between 'b' and 'x', so the 'pos' variable value is
+     * To start, move all the child pointers after the insertion point
+     * of 1+sizeof(pointer) bytes on the right, to obtain:
+     *
+     * [numc][abx][ap][bp].....[xp]|auxp| */
+    src = n->data+n->size+sizeof(raxNode*)*pos;
+    memmove(src+1+sizeof(raxNode*),src,sizeof(raxNode*)*(n->size-pos));
+
+    /* Now make the space for the additional char in the data section,
+     * but also move the pointers before the insertion point in the right
+     * by 1 byte, in order to obtain the following:
+     *
+     * [numc][ab.x][ap][bp]....[xp]|auxp| */
+    src = n->data+pos;
+    memmove(src+1,src,n->size-pos+sizeof(raxNode*)*pos);
+
+    /* We can now set the character and its child node pointer to get:
+     *
+     * [numc][abcx][ap][bp][cp]....|auxp|
+     * [numc][abcx][ap][bp][cp][xp]|auxp| */
     raxNode *child = raxNewNode(0);
-    n->data[n->size] = c;
-    memcpy(n->data+n->size+1+sizeof(raxNode*)*n->size,
-           &child,sizeof(child));
+    n->data[pos] = c;
     n->size++;
+    raxNode **childfield = (raxNode**)(n->data+n->size+sizeof(raxNode*)*pos);
+    memcpy(childfield,&child,sizeof(child));
     *childptr = child;
+    *parentlink = childfield;
     return n;
 }
 
@@ -600,10 +620,10 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             i += comprsize;
         } else {
             debugf("Inserting normal node\n");
-            h = raxAddChild(h,s[i],&child);
-            raxNode **children = (raxNode**)(h->data+h->size);
+            raxNode **new_parentlink;
+            h = raxAddChild(h,s[i],&child,&new_parentlink);
             memcpy(parentlink,&h,sizeof(h));
-            parentlink = children + h->size - 1;
+            parentlink = new_parentlink;
             i++;
         }
         h = child;
@@ -1028,7 +1048,8 @@ int main(void) {
         int len = snprintf(buf,sizeof(buf),"%d",i);
         void *data = raxFind(t,(unsigned char*)buf,len);
         if (data != (void*)(long)i) {
-            printf("Issue with %s\n", buf);
+            printf("Issue with %s: %p instead of %p\n", buf,
+                data, (void*)(long)i);
         }
     }
     printf("Lookup: %f\n", (double)(ustime()-start)/1000000);
@@ -1079,7 +1100,7 @@ int main(void) {
 int main(void) {
     printf("notfound = %p\n", raxNotFound);
     rax *t = raxNew();
-    char *toadd[] = {"romane","romanus","romulus","rubens","ruber","rubicon","rubicundus",NULL};
+    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus",NULL};
 
     srand(time(NULL));
     for (int x = 0; x < 10000; x++) rand();

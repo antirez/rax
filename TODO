@@ -1,8 +1,5 @@
-* Insert new nodes in-place, so that the string of characters inside a node
-  is taken sorted, and we can use binary search or just stop scanning
-  once a char greater than the one we are looking for is found.
-  This also makes the tree lexicographically ordered which is a huge
-  feature to have for certain use cases.
+* Use binary search or just stop scanning once a char greater than the one
+  we are looking for is found.
 * Test the insertion of strings greater then 512 MB.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Handle OOM everywhere. Consider a define to switch checking off if it has

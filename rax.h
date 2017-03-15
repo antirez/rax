@@ -66,7 +66,7 @@
 
 #define RAX_NODE_MAX_SIZE ((1<<29)-1)
 typedef struct raxNode {
-    uint32_t iskey:1;     /* Does this node contains a key? */
+    uint32_t iskey:1;     /* Does this node contain a key? */
     uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
     uint32_t iscompr:1;   /* Node is compressed. */
     uint32_t size:29;     /* Number of children, or compressed string len. */
