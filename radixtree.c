@@ -132,7 +132,7 @@ void radtreeSetData(radtreeNode *n, void *data) {
     if (data != NULL) {
         void **ndata = (void**)
             ((char*)n+radtreeNodeCurrentLength(n)-sizeof(void*));
-        *ndata = data;
+        memcpy(ndata,&data,sizeof(data));
         n->isnull = 0;
     } else {
         n->isnull = 1;
@@ -143,7 +143,9 @@ void radtreeSetData(radtreeNode *n, void *data) {
 void *radtreeGetData(radtreeNode *n) {
     if (n->isnull) return NULL;
     void **ndata =(void**)((char*)n+radtreeNodeCurrentLength(n)-sizeof(void*));
-    return *ndata;
+    void *data;
+    memcpy(&data,ndata,sizeof(data));
+    return data;
 }
 
 /* Add a new child to the node 'n' representing the character
@@ -190,7 +192,7 @@ radtreeNode *radtreeAddChild(radtreeNode *n, char c, radtreeNode **childptr) {
     radtreeNode *child = radtreeNewNode(0);
     n->data[n->size] = c;
     memcpy(n->data+n->size+1+sizeof(radtreeNode*)*n->size,
-           &child,sizeof(void*));
+           &child,sizeof(child));
     n->size++;
     *childptr = child;
     return n;
@@ -236,7 +238,7 @@ radtreeNode *radtreeCompressNode(radtreeNode *n, unsigned char *s, size_t len, r
     if (n->iskey) radtreeSetData(n,data);
     radtreeNode **childfield = radtreeNodeLastChildPtr(n);
     *child = radtreeNewNode(0);
-    *childfield = *child;
+    memcpy(childfield,&child,sizeof(child));
     return n;
 }
 
@@ -278,10 +280,10 @@ static inline size_t radtreeLowWalk(radtree *radtree, unsigned char *s, size_t l
         }
 
         if (ts) radtreeStackPush(ts,h); /* Save stack of parent nodes. */
-        radtreeNode **children = (radtreeNode**)(h->data+h->size);
+        radtreeNode **children = radtreeNodeFirstChildPtr(h);
         if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
-        h = children[j];
-        parentlink = &children[j];
+        memcpy(&h,children+j,sizeof(h));
+        parentlink = children+j;
     }
     if (stopnode) *stopnode = h;
     if (plink) *plink = parentlink;
@@ -315,7 +317,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
             return 0; /* Element already exists. */
         }
         h = radtreeReallocForData(h,data);
-        *parentlink = h;
+        memcpy(parentlink,&h,sizeof(h));
         radtreeSetData(h,data);
         return 1; /* Element inserted. */
     }
@@ -454,7 +456,8 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
 
         /* 1: Save next pointer. */
         radtreeNode **childfield = radtreeNodeLastChildPtr(h);
-        radtreeNode *next = *childfield;
+        radtreeNode *next;
+        memcpy(&next,childfield,sizeof(next));
         debugf("Next is %p\n", (void*)next);
         debugf("iskey %d\n", h->iskey);
         if (h->iskey) {
@@ -472,7 +475,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
                 splitnode = radtreeReallocForData(splitnode,ndata);
                 radtreeSetData(splitnode,ndata);
             }
-            *parentlink = splitnode;
+            memcpy(parentlink,&splitnode,sizeof(splitnode));
         } else {
             /* 3b: Trim the compressed node. */
             size_t nodesize = sizeof(radtreeNode)+j+sizeof(radtreeNode*);
@@ -488,8 +491,8 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
                 radtreeSetData(trimmed,ndata);
             }
             radtreeNode **cp = radtreeNodeLastChildPtr(trimmed);
-            *cp = splitnode;
-            *parentlink = trimmed;
+            memcpy(cp,&splitnode,sizeof(splitnode));
+            memcpy(parentlink,&trimmed,sizeof(trimmed));
             parentlink = cp; /* Set parentlink to splitnode parent. */
             radtree->numnodes++;
         }
@@ -509,7 +512,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
             postfix->iscompr = postfixlen > 1;
             memcpy(postfix->data,h->data+j+1,postfixlen);
             radtreeNode **cp = radtreeNodeLastChildPtr(postfix);
-            *cp = next;
+            memcpy(cp,&next,sizeof(next));
             radtree->numnodes++;
         } else {
             /* 4b: just use next as postfix node. */
@@ -518,7 +521,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
 
         /* 5: Set splitnode first child as the postfix node. */
         radtreeNode **splitchild = radtreeNodeLastChildPtr(splitnode);
-        *splitchild = postfix;
+        memcpy(splitchild,&postfix,sizeof(postfix));
 
         /* 6. Continue insertion: this will cause the splitnode to
          * get a new child (the non common character at the currently
@@ -532,7 +535,8 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
 
         /* 1: Save next pointer. */
         radtreeNode **childfield = radtreeNodeLastChildPtr(h);
-        radtreeNode *next = *childfield;
+        radtreeNode *next;
+        memcpy(&next,childfield,sizeof(next));
 
         /* 2: Create the postfix node. */
         size_t postfixlen = h->size - j;
@@ -544,7 +548,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
         memcpy(postfix->data,h->data+j,postfixlen);
         radtreeSetData(postfix,data);
         radtreeNode **cp = radtreeNodeLastChildPtr(postfix);
-        *cp = next;
+        memcpy(cp,&next,sizeof(next));
         radtree->numnodes++;
 
         /* 3: Trim the compressed node. */
@@ -556,7 +560,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
         trimmed->isnull = 0;
         memcpy(trimmed->data,h->data,j);
         trimmed->iscompr = j > 1 ? 1 : 0;
-        *parentlink = trimmed;
+        memcpy(parentlink,&trimmed,sizeof(trimmed));
         if (h->iskey) {
             void *aux = radtreeGetData(h);
             radtreeSetData(trimmed,aux);
@@ -566,7 +570,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
         /* Fix the trimmed node child pointer to point to
          * the postfix node. */
         cp = radtreeNodeLastChildPtr(trimmed);
-        *cp = postfix;
+        memcpy(cp,&postfix,sizeof(postfix));
 
         /* Finish! We don't need to contine with the insertion
          * algorithm for ALGO 2. The key is already inserted. */
@@ -590,15 +594,15 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
             if (comprsize > RADTREE_NODE_MAX_SIZE)
                 comprsize = RADTREE_NODE_MAX_SIZE;
             h = radtreeCompressNode(h,s+i,comprsize,&child);
-            *parentlink = h;
+            memcpy(parentlink,&h,sizeof(h));
             parentlink = radtreeNodeLastChildPtr(h);
             i += comprsize;
         } else {
             debugf("Inserting normal node\n");
             h = radtreeAddChild(h,s[i],&child);
             radtreeNode **children = (radtreeNode**)(h->data+h->size);
-            *parentlink = h;
-            parentlink = &children[h->size-1];
+            memcpy(parentlink,&h,sizeof(h));
+            parentlink = children + h->size - 1;
             i++;
         }
         h = child;
@@ -606,7 +610,7 @@ int radtreeInsert(radtree *radtree, unsigned char *s, size_t len, void *data) {
     if (!h->iskey) radtree->numele++;
     h = radtreeReallocForData(h,data);
     radtreeSetData(h,data);
-    *parentlink = h;
+    memcpy(parentlink,&h,sizeof(h));
     return 1; /* Element inserted. */
 }
 
@@ -630,7 +634,12 @@ void *radtreeFind(radtree *radtree, unsigned char *s, size_t len) {
  * memory without any bound checking). */
 radtreeNode **radtreeFindParentLink(radtreeNode *parent, radtreeNode *child) {
     radtreeNode **cp = radtreeNodeFirstChildPtr(parent);
-    while(*cp != child) cp++;
+    radtreeNode *c;
+    while(1) {
+        memcpy(&c,cp,sizeof(c));
+        if (c == child) break;
+        cp++;
+    }
     return cp;
 }
 
@@ -664,7 +673,10 @@ radtreeNode *radtreeRemoveChild(radtreeNode *parent, radtreeNode *child) {
 
     /* 2. Search the child pointer to remove inside the array of children
      *    pointers. */
-    while(*c != child) {
+    while(1) {
+        radtreeNode *aux;
+        memcpy(&aux,c,sizeof(aux));
+        if (aux == child) break;
         c++;
         e++;
     }
@@ -745,7 +757,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 } else {
                     parentlink = radtreeFindParentLink(parent,h);
                 }
-                *parentlink = new;
+                memcpy(parentlink,&new,sizeof(new));
             }
 
             /* If after the removal the node has just a single child
@@ -827,7 +839,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
         int nodes = 1;
         while(h->size != 0) {
             radtreeNode **cp = radtreeNodeLastChildPtr(h);
-            h = *cp;
+            memcpy(&h,cp,sizeof(h));
             if (h->iskey || (!h->iscompr && h->size != 1)) break;
             nodes++;
             comprsize += h->size;
@@ -853,7 +865,7 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 comprsize += h->size;
                 radtreeNode **cp = radtreeNodeLastChildPtr(h);
                 radtreeNode *tofree = h;
-                h = *cp;
+                memcpy(&h,cp,sizeof(h));
                 free(tofree); radtree->numnodes--;
                 if (h->iskey || (!h->iscompr && h->size != 1)) break;
             }
@@ -862,12 +874,12 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
             /* Now 'h' points to the first node that we still need to use,
              * so our new node child pointer will point to it. */
             radtreeNode **cp = radtreeNodeLastChildPtr(new);
-            *cp = h;
+            memcpy(cp,&h,sizeof(h));
 
             /* Fix parent link. */
             if (parent) {
                 radtreeNode **parentlink = radtreeFindParentLink(parent,start);
-                *parentlink = new;
+                memcpy(parentlink,&new,sizeof(new));
             } else {
                 radtree->head = new;
             }
@@ -876,7 +888,6 @@ int radtreeRemove(radtree *radtree, unsigned char *s, size_t len) {
                 nodes, (int)comprsize);
         }
     }
-
     radtreeStackFree(&ts);
     return 1;
 }
@@ -887,7 +898,9 @@ void radtreeRecursiveFree(radtree *radtree, radtreeNode *n) {
     int numchildren = n->iscompr ? 1 : n->size;
     radtreeNode **cp = radtreeNodeLastChildPtr(n);
     while(numchildren--) {
-        radtreeRecursiveFree(radtree,*cp);
+        radtreeNode *child;
+        memcpy(&child,cp,sizeof(child));
+        radtreeRecursiveFree(radtree,child);
         cp--;
     }
     debugnode("free depth-first",n);
@@ -954,7 +967,9 @@ void radtreeRecursiveShow(int level, int lpad, radtreeNode *n) {
         } else {
             printf(" -> ");
         }
-        radtreeRecursiveShow(level+1,lpad,*cp);
+        radtreeNode *child;
+        memcpy(&child,cp,sizeof(child));
+        radtreeRecursiveShow(level+1,lpad,child);
         cp++;
     }
 }
@@ -971,7 +986,12 @@ void radtreeDebugShowNode(const char *msg, radtreeNode *n) {
         msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);
     int numcld = n->iscompr ? 1 : n->size;
     radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);
-    while(numcld--) printf("%p ", (void*)*(cldptr++));
+    while(numcld--) {
+        radtreeNode *child;
+        memcpy(&child,cldptr,sizeof(child));
+        cldptr++;
+        printf("%p ", (void*)child);
+    }
     printf("\n");
 }
 
