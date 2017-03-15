@@ -12,7 +12,7 @@
   feature to have for certain use cases.
 * Test the insertion of strings greater then 512 MB.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
-* Make the code alignment-safe.
+* Make the code alignment-safe. Check all the *cp / *parentlink deferences.
 * Handle OOM everywhere. Consider a define to switch checking off if it has
   a measurable performance cost.
 * All the low level node management functions should be called radtreeNode...()

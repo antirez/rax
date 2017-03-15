@@ -11,16 +11,7 @@ void *radtreeNotFound = (void*)"radtree-not-found-pointer";
 
 /* -------------------------------- Debugging ------------------------------ */
 
-/* Used by debugnode() macro to show info about a given node. */
-radtreeNode **radtreeNodeLastChildPtr(radtreeNode *n);
-void radtreeDebugShowNode(const char *msg, radtreeNode *n) {
-    printf("%s: %p [%.*s] key:%d size:%d children:",
-        msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);
-    int numcld = n->iscompr ? 1 : n->size;
-    radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);
-    while(numcld--) printf("%p ", (void*)*(cldptr++));
-    printf("\n");
-}
+void radtreeDebugShowNode(const char *msg, radtreeNode *n);
 
 /* Turn debugging messages on/off. */
 #if 0
@@ -207,12 +198,15 @@ radtreeNode *radtreeAddChild(radtreeNode *n, char c, radtreeNode **childptr) {
 
 /* Return the pointer to the last child pointer in a node. For the compressed
  * nodes this is the only child pointer. */
-radtreeNode **radtreeNodeLastChildPtr(radtreeNode *n) {
-    char *p = (char*)n;
-    p += radtreeNodeCurrentLength(n) - sizeof(radtreeNode*);
-    if (n->iskey && !n->isnull) p -= sizeof(void*);
-    return (radtreeNode**)p;
-}
+#define radtreeNodeLastChildPtr(n) ((radtreeNode**) ( \
+    ((char*)(n)) + \
+    radtreeNodeCurrentLength(n) - \
+    sizeof(radtreeNode*) - \
+    (((n)->iskey && !(n)->isnull) ? sizeof(void*) : 0) \
+))
+
+/* Return the pointer to the first child pointer. */
+#define radtreeNodeFirstChildPtr(n) ((radtreeNode**)((n)->data+(n)->size))
 
 /* Turn the node 'n', that must be a node without any children, into a
  * compressed node representing a set of nodes linked one after the other
@@ -635,8 +629,7 @@ void *radtreeFind(radtree *radtree, unsigned char *s, size_t len) {
  * operation is an undefined behavior (it will continue scanning the
  * memory without any bound checking). */
 radtreeNode **radtreeFindParentLink(radtreeNode *parent, radtreeNode *child) {
-    radtreeNode **cp = radtreeNodeLastChildPtr(parent);
-    if (!parent->iscompr) cp -= (parent->size-1);
+    radtreeNode **cp = radtreeNodeFirstChildPtr(parent);
     while(*cp != child) cp++;
     return cp;
 }
@@ -951,8 +944,7 @@ void radtreeRecursiveShow(int level, int lpad, radtreeNode *n) {
         lpad += (numchildren > 1) ? 7 : 4;
         if (numchildren == 1) lpad += numchars;
     }
-    radtreeNode **cp = radtreeNodeLastChildPtr(n);
-    cp -= numchildren-1;
+    radtreeNode **cp = radtreeNodeFirstChildPtr(n);
     for (int i = 0; i < numchildren; i++) {
         char *branch = " `-(%c) ";
         if (numchildren > 1) {
@@ -971,6 +963,16 @@ void radtreeRecursiveShow(int level, int lpad, radtreeNode *n) {
 void radtreeShow(radtree *radtree) {
     radtreeRecursiveShow(0,0,radtree->head);
     putchar('\n');
+}
+
+/* Used by debugnode() macro to show info about a given node. */
+void radtreeDebugShowNode(const char *msg, radtreeNode *n) {
+    printf("%s: %p [%.*s] key:%d size:%d children:",
+        msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);
+    int numcld = n->iscompr ? 1 : n->size;
+    radtreeNode **cldptr = radtreeNodeLastChildPtr(n) - (numcld-1);
+    while(numcld--) printf("%p ", (void*)*(cldptr++));
+    printf("\n");
 }
 
 #ifdef BENCHMARK_MAIN
