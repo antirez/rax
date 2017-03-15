@@ -1,5 +1,5 @@
-#ifndef RADTREE_H
-#define RADTREE_H
+#ifndef RAX_H
+#define RAX_H
 
 #include <stdint.h>
 
@@ -64,8 +64,8 @@
  *
  */
 
-#define RADTREE_NODE_MAX_SIZE ((1<<29)-1)
-typedef struct radtreeNode {
+#define RAX_NODE_MAX_SIZE ((1<<29)-1)
+typedef struct raxNode {
     uint32_t iskey:1;     /* Does this node contains a key? */
     uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
     uint32_t iscompr:1;   /* Node is compressed. */
@@ -73,7 +73,7 @@ typedef struct radtreeNode {
     /* Data layout is as follows:
      *
      * If node is not compressed we have 'size' bytes, one for each children
-     * character, and 'size' radtreeNode pointers, point to each child node.
+     * character, and 'size' raxNode pointers, point to each child node.
      * Note how the character is not stored in the children but in the
      * edge of the parents:
      *
@@ -93,20 +93,20 @@ typedef struct radtreeNode {
      * nodes).
      *
      * If the node has an associated key (iskey=1) and is not NULL
-     * (isnull=0), then after the radtreeNode pointers poiting to the
+     * (isnull=0), then after the raxNode pointers poiting to the
      * childen, an additional value pointer is present (as you can see
      * in the representation above as "value-ptr" field).
      */
     unsigned char data[];
-} radtreeNode;
+} raxNode;
 
-typedef struct radtree {
-    radtreeNode *head;
+typedef struct rax {
+    raxNode *head;
     uint64_t numele;
     uint64_t numnodes;
-} radtree;
+} rax;
 
 /* A special pointer returned for not found items. */
-extern void *radtreeNotFound;
+extern void *raxNotFound;
 
 #endif
