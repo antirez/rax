@@ -295,13 +295,6 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
         } else {
             for (j = 0; j < h->size; j++) {
                 if (v[j] == s[i]) break;
-                if (v[j] > s[i]) {
-                    /* No need to scan more if the current children
-                     * is already lexicographically greater than what
-                     * we are looking for, since they are ordered. */
-                    j = h->size;
-                    break;
-                }
             }
             if (j == h->size) break;
             i++;
@@ -313,8 +306,9 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
         memcpy(&h,children+j,sizeof(h));
         parentlink = children+j;
         j = 0; /* If the new node is compressed and we do not
-                  iterate again (since i == l) the split
-                  position is 0. */
+                  iterate again (since i == l) set the split
+                  position to 0 to signal this node represents
+                  the searched key. */
     }
     if (stopnode) *stopnode = h;
     if (plink) *plink = parentlink;
