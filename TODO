@@ -1,5 +1,7 @@
-* After a given number of children, use binary search or just stop scanning
-  once a char greater than the one we are looking for is found.
+ASAP
+===
+
+* Allow to switch allocator easily just modifying a rax_alloc.h file.
 * Change the API so that there is always the ability to return the old value
   both when adding (updating) and removing elements.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty
@@ -21,21 +23,22 @@
 
    Example:
 
-   radtreeIterator *iterator = radtreeSeek("abc",3,RADTREE_INCL,
-                                           "xyz',3,RADTREE_EXCL,
-                                           RADTREE_SEEK_START);
+   raxIterator iter;
+   raxSeek(&iter,"abc",3,"xyz",3,RAD_ITER_SEEK_START|RAD_ITER_SAFE);
    while(radtreeNext(iterator)) {
-      printf("key: %.*s, val %p\n", (int)iterator->keylen,
-                                    (char*)iterator->key,
-                                    iterator->val);
+       printf("key: %.*s, val %p\n", (int)iter->keylen,
+                                     (char*)iter->key,
+                                     iter->data);
    }
-   radtreeFreeIterator(iterator);
-
-   Flags in iterator creation:
-
-   RADTREE_SEEK_START
-   RADTREE_SEEK_END
-   RADTREE_DEL_SAFE (Rescan the tree at every "next"/"prev" operation)
+   raxFreeIterator(iterator);
 
 * Random element function: perform log(N) random steps followed by rand(log(N)) steps.
 * Move test/benchmark to separated C files.
+
+FUTURE
+===
+
+* Ability to store aux data of any size inside the node itself, instead of the
+  pointer. Could be done setting a special first byte in the value section
+  to represent an encoded and progressive data length. This could further
+  reduce the memory needs of a radix tree to represent a string->string map.

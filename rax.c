@@ -36,18 +36,11 @@ void raxDebugShowNode(const char *msg, raxNode *n);
  * need to navigate the tree upward.
  * ------------------------------------------------------------------------- */
 
-#define RAXSTACK_STACK_ITEMS 32
-typedef struct raxStack {
-    void **stack;
-    size_t items, maxitems;
-    void *static_items[RAXSTACK_STACK_ITEMS];
-} raxStack;
-
 /* Initialize the stack. */
 static inline void raxStackInit(raxStack *ts) {
     ts->stack = ts->static_items;
     ts->items = 0;
-    ts->maxitems = RAXSTACK_STACK_ITEMS;
+    ts->maxitems = RAX_STACK_STATIC_ITEMS;
 }
 
 /* Push an item into the stack, returns 1 on success, 0 on out of memory. */

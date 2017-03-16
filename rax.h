@@ -106,7 +106,48 @@ typedef struct rax {
     uint64_t numnodes;
 } rax;
 
+/* Stack data structure used by raxLowWalk() in order to, optionally, return
+ * a list of parent nodes to the caller. The nodes do not have a "parent"
+ * field for space concerns, so we use the auxiliary stack when needed. */
+#define RAX_STACK_STATIC_ITEMS 32
+typedef struct raxStack {
+    void **stack; /* Points to static_items or an heap allocated array. */
+    size_t items, maxitems; /* Number of items contained and total space. */
+    /* Up to RAXSTACK_STACK_ITEMS items we avoid to allocate on the heap
+     * and use this static array of pointers instead. */
+    void *static_items[RAX_STACK_STATIC_ITEMS];
+} raxStack;
+
+/* Radix tree iterator state is encapsulated into this data structure. */
+#define RAX_ITER_STATIC_LEN 128
+#define RAX_ITER_NONE 0
+#define RAX_ITER_STARTEX  (1<<0)      /* Start exclusive. */
+#define RAX_ITER_ENDEX    (1<<1)      /* End exclusive. */
+#define RAX_ITER_EX       (RAX_ITER_STARTEX|RAX_ITER_ENDEX)
+#define RAX_ITER_SEEK_START 0         /* Start from 'start'. The default. */
+#define RAX_ITER_SEEK_END   (1<<2)    /* Start from the 'end' element. */
+#define RAX_ITER_EOF (1<<2)    /* End of iteration reached. */
+#define RAX_ITER_SAFE (1<<3)   /* Safe iterator, allows operations while
+                                  iterating. But it is slower. */
+typedef struct raxIterator {
+    int flags;
+    unsigned char *key;     /* The current string. */
+    unsigned char *start;   /* The start string. */
+    unsigned char *end;     /* The end string. */
+    void *data;             /* Data associated to this key. */
+    size_t key_len;
+    size_t start_len;
+    size_t end_len;
+    unsigned char key_static_string[RAX_ITER_STATIC_LEN];
+    unsigned char start_static_string[RAX_ITER_STATIC_LEN];
+    unsigned char end_static_string[RAX_ITER_STATIC_LEN];
+    raxNode *node;          /* Current node. Only for not safe iterators. */
+    raxStack stack;
+} raxIterator;
+
 /* A special pointer returned for not found items. */
 extern void *raxNotFound;
+extern unsigned char *raxFirst;
+extern unsigned char *raxLast;
 
 #endif
