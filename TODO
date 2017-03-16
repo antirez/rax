@@ -1,6 +1,9 @@
-* Use binary search or just stop scanning once a char greater than the one
-  we are looking for is found.
-* Test the insertion of strings greater then 512 MB.
+* After a given number of children, use binary search or just stop scanning
+  once a char greater than the one we are looking for is found.
+* Change the API so that there is always the ability to return the old value
+  both when adding (updating) and removing elements.
+* Test the insertion of strings greater then 512 MB. Add unit test for empty
+  string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Handle OOM everywhere. Consider a define to switch checking off if it has
   a measurable performance cost.
@@ -34,4 +37,5 @@
    RADTREE_SEEK_END
    RADTREE_DEL_SAFE (Rescan the tree at every "next"/"prev" operation)
 
-* Random element function.
+* Random element function: perform log(N) random steps followed by rand(log(N)) steps.
+* Move test/benchmark to separated C files.
