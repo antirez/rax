@@ -281,7 +281,7 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
     raxNode **parentlink = &rax->head;
 
     size_t i = 0; /* Position in the string. */
-    size_t j = 0; /* Position in the node children / bytes (if compressed). */
+    size_t j = 0; /* Position in the node children (or bytes if compressed).*/
     while(h->size && i < len) {
         debugnode("Lookup current node",h);
         char *v = (char*)h->data;
@@ -294,6 +294,13 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
         } else {
             for (j = 0; j < h->size; j++) {
                 if (v[j] == s[i]) break;
+                if (v[j] > s[i]) {
+                    /* No need to scan more if the current children
+                     * is already lexicographically greater than what
+                     * we are looking for, since they are ordered. */
+                    j = h->size;
+                    break;
+                }
             }
             if (j == h->size) break;
             i++;
