@@ -293,6 +293,9 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
             }
             if (j != h->size) break;
         } else {
+            /* Even when h->size is large, linear scan provides good
+             * performances compared to other approaches that are in theory
+             * more sounding, like performing a binary search. */
             for (j = 0; j < h->size; j++) {
                 if (v[j] == s[i]) break;
             }
