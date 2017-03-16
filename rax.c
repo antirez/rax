@@ -19,6 +19,7 @@ void raxDebugShowNode(const char *msg, raxNode *n);
     do {                                                                       \
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
         printf(__VA_ARGS__);                                                   \
+        fflush(stdout);                                                        \
     } while (0);
 
 #define debugnode(msg,n) raxDebugShowNode(msg,n)
@@ -311,6 +312,9 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
         if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
         memcpy(&h,children+j,sizeof(h));
         parentlink = children+j;
+        if (h->iscompr) j = 0; /* If the new node is compressed and we do not
+                                  iterate again (since i == l) the split
+                                  position is 0. */
     }
     if (stopnode) *stopnode = h;
     if (plink) *plink = parentlink;
@@ -338,7 +342,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
      * inserted or this middle node is currently not a key, but can represent
      * our key. We have just to reallocate the node and make space for the
      * data pointer. */
-    if (i == len && (!h->iscompr || j == h->size)) {
+    if (i == len && (!h->iscompr || j == 0 /* not in the middle if j is 0 */)) {
         if (h->iskey) {
             raxSetData(h,data);
             return 0; /* Element already exists. */
@@ -454,7 +458,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
      * Let $SPLITPOS be the zero-based index at which, in the
      * compressed node array of characters, we stopped iterating because
      * there were no more keys character to match. So in the example of
-     * the node "ANNIBABLE", addig the string "ANNI", the $SPLITPOS is 4.
+     * the node "ANNIBALE", addig the string "ANNI", the $SPLITPOS is 4.
      *
      * 1. Save the current compressed node $NEXT pointer (the pointer to the
      *    child element, that is always present in compressed nodes).
@@ -558,8 +562,8 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         h = splitnode;
     } else if (h->iscompr && i == len) {
     /* ------------------------- ALGORITHM 2 --------------------------- */
-        debugf("ALGO 2: Stopped at compressed node %.*s (%p)\n",
-            h->size, h->data, (void*)h);
+        debugf("ALGO 2: Stopped at compressed node %.*s (%p) j = %d\n",
+            h->size, h->data, (void*)h, j);
 
         /* 1: Save next pointer. */
         raxNode **childfield = raxNodeLastChildPtr(h);
@@ -573,6 +577,8 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         raxNode *postfix = malloc(nodesize);
         postfix->size = postfixlen;
         postfix->iscompr = postfixlen > 1;
+        postfix->iskey = 1;
+        postfix->isnull = 0;
         memcpy(postfix->data,h->data+j,postfixlen);
         raxSetData(postfix,data);
         raxNode **cp = raxNodeLastChildPtr(postfix);
@@ -584,10 +590,10 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         if (h->iskey && !h->isnull) nodesize += sizeof(void*);
         raxNode *trimmed = malloc(nodesize);
         trimmed->size = j;
+        trimmed->iscompr = j > 1;
         trimmed->iskey = 0;
         trimmed->isnull = 0;
         memcpy(trimmed->data,h->data,j);
-        trimmed->iscompr = j > 1 ? 1 : 0;
         memcpy(parentlink,&trimmed,sizeof(trimmed));
         if (h->iskey) {
             void *aux = raxGetData(h);
@@ -1021,6 +1027,7 @@ void raxDebugShowNode(const char *msg, raxNode *n) {
         printf("%p ", (void*)child);
     }
     printf("\n");
+    fflush(stdout);
 }
 
 #ifdef BENCHMARK_MAIN
@@ -1127,6 +1134,17 @@ int main(void) {
         printf("Random lookup: %f\n", (double)(ustime()-start)/1000000);
 
         start = ustime();
+        int count = 0;
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            buf[i%len] = '!'; /* "!" is never set into keys. */
+            void *data = raxFind(t,(unsigned char*) buf,len);
+            if (data != (void*)(long)i) count++;
+        }
+        printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
@@ -1134,16 +1152,6 @@ int main(void) {
             assert(retval == 1);
         }
         printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
-
-        start = ustime();
-        int count = 0;
-        for (int i = 0; i < 5000000; i++) {
-            char buf[64];
-            int len = int2key(buf,sizeof(buf),i,mode);
-            void *data = raxFind(t,(unsigned char*) buf,len);
-            if (data != (void*)(long)i) count++;
-        }
-        printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 
         printf("%llu total nodes\n", (unsigned long long)t->numnodes);
         printf("%llu total elements\n", (unsigned long long)t->numele);
