@@ -1127,6 +1127,17 @@ int main(void) {
         printf("Random lookup: %f\n", (double)(ustime()-start)/1000000);
 
         start = ustime();
+        int count = 0;
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            buf[i%len] = '!'; /* "!" is never set into keys. */
+            void *data = raxFind(t,(unsigned char*) buf,len);
+            if (data != (void*)(long)i) count++;
+        }
+        printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
@@ -1134,16 +1145,6 @@ int main(void) {
             assert(retval == 1);
         }
         printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
-
-        start = ustime();
-        int count = 0;
-        for (int i = 0; i < 5000000; i++) {
-            char buf[64];
-            int len = int2key(buf,sizeof(buf),i,mode);
-            void *data = raxFind(t,(unsigned char*) buf,len);
-            if (data != (void*)(long)i) count++;
-        }
-        printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 
         printf("%llu total nodes\n", (unsigned long long)t->numnodes);
         printf("%llu total elements\n", (unsigned long long)t->numele);
