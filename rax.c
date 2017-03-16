@@ -1107,6 +1107,8 @@ int main(void) {
             raxInsert(t,(unsigned char*)buf,len,(void*)(long)i);
         }
         printf("Insert: %f\n", (double)(ustime()-start)/1000000);
+        printf("%llu total nodes\n", (unsigned long long)t->numnodes);
+        printf("%llu total elements\n", (unsigned long long)t->numele);
 
         start = ustime();
         for (int i = 0; i < 5000000; i++) {
