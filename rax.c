@@ -939,6 +939,227 @@ void raxFree(rax *rax) {
     free(rax);
 }
 
+/* ------------------------------- Iterator --------------------------------- */
+
+/* Initialize a Rax iterator. This call should be performed a single time
+ * to initialize the iterator, and can be followed by either raxNext() or
+ * raxPrev() directly, or raxSeek() if we want to seek the iterator to a
+ * specific position. When the iterator is no longer useful, raxStop() should
+ * be called. */
+void raxStart(raxIterator *it, rax *rt) {
+    it->flags = RAX_ITER_NEVER_SEEKED;
+    it->rt = rt;
+    it->key = NULL;
+}
+
+/* Append characters at the current key string of the iterator 'it'. This
+ * is a low level function used to implement the iterator, not callable by
+ * the user. */
+int raxIteratorAddChars(raxIterator *it, unsigned char *s, size_t len) {
+    if (it->key_max < it->key_len+len) {
+        unsigned char *old = (it->key == it->key_static_string) ? NULL :
+                                                                  it->key;
+        size_t new_max = (it->key_len+len)*2;
+        it->key = realloc(old,new_max);
+        if (it->key == NULL) {
+            it->key = (!old) ? it->key_static_string : old;
+            return 0;
+        }
+        if (old == NULL) memcpy(it->key,it->key_static_string,it->key_len);
+        it->key_max = new_max;
+    }
+    memcpy(it->key+it->key_len,s,len);
+    it->key_len += len;
+    return 1;
+}
+
+/* Remove the specified number of chars from the right of the current
+ * iterator key. */
+void raxIteratorDelChars(raxIterator *it, size_t count) {
+    it->key_len -= count;
+}
+
+/* Do an iteration step towards prev/next element according to 'prev'
+ * (of 0 next, if non-zero prev). At the end of the step the iterator
+ * key will represent the current key. If it is not possible to step in the
+ * specified direction, the iterator is flagged with RAX_ITER_EOF.
+ *
+ * If 'noup' is true, during the scanning of the first/last, the current
+ * node is already assumed to be the parent of the last key node, so the
+ * first operation to go back to the parent will be skipped. This option is
+ * used by raxSeek() when implementing seeking a non existing element with
+ * the ">" or "<" options: the starting node is not a key in that particular
+ * case.
+ *
+ * The function returns 1 on success or 0 on out of memory. */
+int raxIteratorStep(raxIterator *it, int prev, int noup) {
+    while(1) {
+        int children = it->node->iscompr ? 1 : it->node->size;
+        if (!prev && !noup && children) {
+            printf("GO DEEPER\n");
+            /* For "next", try to go deeper in the tree to start. The previous
+             * element elmitted could be along the way and there could be more
+             * nested nodes. */
+            raxStackPush(&it->stack,it->node);
+            raxNode **cp = raxNodeFirstChildPtr(it->node);
+            if (!raxIteratorAddChars(it,it->node->data,
+                it->node->iscompr ? it->node->size : 1)) return 0;
+            memcpy(&it->node,cp,sizeof(it->node));
+            if (it->node->iskey) {
+                it->data = raxGetData(it->node);
+                return 1;
+            }
+        } else {
+            printf("NEXT CHILD\n");
+            while(1) {
+                /* Already on head? Can't go up, iteration finished. */
+                if (it->node == it->rt->head) {
+                    it->flags |= RAX_ITER_EOF;
+                    return 1;
+                }
+                /* If there are no children at the current node, try parent's
+                 * next/prev child. */
+                unsigned char prevchild = it->key[it->key_len-1];
+                if (!noup) {
+                    it->node = raxStackPop(&it->stack);
+                } else {
+                    noup = 0;
+                }
+                /* Adjust the current key to represent the node we are
+                 * at. */
+                int todel = it->node->iscompr ? it->node->size : 1;
+                raxIteratorDelChars(it,todel);
+
+                /* Try visitng the next child if there was at least one
+                 * additional child. */
+                if (!it->node->iscompr && it->node->size > 1) {
+                    raxNode **cp = raxNodeFirstChildPtr(it->node);
+                    int i = 0;
+                    while (i < it->node->size) {
+                        printf("SCAN %c\n", it->node->data[i]);
+                        if (it->node->data[i] > prevchild) break;
+                        i++;
+                        cp++;
+                    }
+                    if (i != it->node->size) {
+                        printf("SCAN found a new node\n");
+                        raxIteratorAddChars(it,it->node->data+i,1);
+                        raxStackPush(&it->stack,it->node);
+                        memcpy(&it->node,cp,sizeof(it->node));
+                        if (it->node->iskey) {
+                            it->data = raxGetData(it->node);
+                            return 1;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* Initialize and seek an iterator at the specified element.
+ * Return 0 if the seek failed for syntax error or out of memory. Otherwise
+ * 1 is returned. */
+int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
+    int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
+
+    if (it->key != it->key_static_string) {
+        free(it->key);
+        it->key = it->key_static_string;
+        it->key_max = RAX_ITER_STATIC_LEN;
+    }
+
+    it->stack.items = 0;
+    it->flags |= RAX_ITER_JUST_SEEKED;
+    it->flags &= ~RAX_ITER_NEVER_SEEKED;
+    it->key_len = 0;
+    it->node = NULL;
+
+    /* Set flags according to the operator used to perform the seek. */
+    if (op[0] == '>') {
+        gt = 1;
+        if (op[1] == '=') eq = 1;
+    } else if (op[0] == '<') {
+        lt = 1;
+        if (op[1] == '=') eq = 1;
+    } else if (op[0] == '=') {
+        eq = 1;
+    } else if (op[0] == '^') {
+        first = 1;
+    } else if (op[0] == '$') {
+        last = 1;
+    } else {
+        return 0; /* Error. */
+    }
+
+    /* We need to seek the specified key. What we do here is to actually
+     * perform a lookup, and later invoke the prev/next key code that
+     * we already use for iteration. */
+    size_t i = raxLowWalk(it->rt,ele,len,&it->node,NULL,NULL,&it->stack);
+    if (i == len && eq) {
+        /* We found our node, since the key matches and we have an
+         * "equal" condition. */
+        if (!raxIteratorAddChars(it,ele,len)) return 0; /* OOM. */
+    } else {
+        /* Exact key not found or eq flag not set. We have to set as current
+         * key the one represented by the node we stopped at, and perform
+         * a next/prev operation to seek. To reconstruct the key at this node
+         * we start from the parent and go to the current node, accumulating
+         * the characters found along the way. */
+        raxStackPush(&it->stack,it->node);
+        printf("Stack items %d\n", (int)it->stack.items);
+        for (size_t j = 1; j < it->stack.items; j++) {
+            raxNode *parent = it->stack.stack[j-1];
+            raxNode *child = it->stack.stack[j];
+            if (parent->iscompr) {
+                if (!raxIteratorAddChars(it,parent->data,parent->size))
+                    return 0;
+            } else {
+                raxNode **cp = raxNodeFirstChildPtr(parent);
+                unsigned char *p = parent->data;
+                while(1) {
+                    raxNode *aux;
+                    memcpy(&aux,cp,sizeof(aux));
+                    if (aux == child) break;
+                    cp++;
+                    p++;
+                }
+                if (!raxIteratorAddChars(it,p,1)) return 0;
+            }
+        }
+        raxStackPop(&it->stack);
+
+        /* Our current sting, needs to represent a string that in theory
+         * could be part of that node, so we need to add one more character
+         * that represents the mismatched char where the tree traversal
+         * stopped. */
+        if (!raxIteratorAddChars(it,ele+i,1)) return 0;
+        printf("CURRENT: %.*s\n", (int)it->key_len, (char*)it->key);
+
+        /* Now call prev/next as needed. Clear the just seeked flag before
+         * to proceed otherwise the next/prev functions will refuse to actually
+         * move to the next character. */
+        it->flags &= ~RAX_ITER_JUST_SEEKED;
+        if (lt) raxIteratorStep(it,1,1); /* Seek previous element. */
+        if (gt) raxIteratorStep(it,0,1); /* Seek next element. */
+
+        /* Then set it again, since the element we seeked must be returned
+         * in the next iteration, so the first next/prev call should have
+         * no effect. */
+        it->flags |= RAX_ITER_JUST_SEEKED;
+    }
+    return 1;
+}
+
+int raxNext(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
+    raxIteratorStep(it,0,0);
+    if (it->flags & RAX_ITER_EOF) return 0;
+    return 1;
+}
+
+/* ----------------------------- Introspection ------------------------------ */
+
 /* This function is mostly used for debugging and learning purposes.
  * It shows an ASCII representation of a tree on standard output, outling
  * all the nodes and the contained keys.
@@ -1160,7 +1381,7 @@ int main(void) {
 int main(void) {
     printf("notfound = %p\n", raxNotFound);
     rax *t = raxNew();
-    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus",NULL};
+    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
 
     srand(time(NULL));
     for (int x = 0; x < 10000; x++) rand();
@@ -1171,6 +1392,20 @@ int main(void) {
     for (long i = 0; i < items; i++)
         raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
     raxShow(t);
+
+    raxIterator iter;
+    raxStart(&iter,t);
+    raxSeek(&iter,(unsigned char*)"rpxxx",5,">=");
+
+    while(raxNext(&iter,NULL,0,NULL)) {
+        printf("--- key: %.*s, val %p\n", (int)iter.key_len,
+                                      (char*)iter.key,
+                                      iter.data);
+    }
+#if 0
+    raxStop(&iter);
+#endif
+    exit(0);
 
     int rnum = rand();
     int survivor = rnum % items;

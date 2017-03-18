@@ -120,29 +120,23 @@ typedef struct raxStack {
 
 /* Radix tree iterator state is encapsulated into this data structure. */
 #define RAX_ITER_STATIC_LEN 128
-#define RAX_ITER_NONE 0
-#define RAX_ITER_STARTEX  (1<<0)      /* Start exclusive. */
-#define RAX_ITER_ENDEX    (1<<1)      /* End exclusive. */
-#define RAX_ITER_EX       (RAX_ITER_STARTEX|RAX_ITER_ENDEX)
-#define RAX_ITER_SEEK_START 0         /* Start from 'start'. The default. */
-#define RAX_ITER_SEEK_END   (1<<2)    /* Start from the 'end' element. */
+#define RAX_ITER_NEVER_SEEKED (1<<0) /* Never initialized. */
+#define RAX_ITER_JUST_SEEKED (1<<1) /* Iterator was just seeked. Return current
+                                       element for the first iteration and
+                                       clear the flag. */
 #define RAX_ITER_EOF (1<<2)    /* End of iteration reached. */
 #define RAX_ITER_SAFE (1<<3)   /* Safe iterator, allows operations while
                                   iterating. But it is slower. */
 typedef struct raxIterator {
     int flags;
+    rax *rt;                /* Radix tree we are iterating. */
     unsigned char *key;     /* The current string. */
-    unsigned char *start;   /* The start string. */
-    unsigned char *end;     /* The end string. */
     void *data;             /* Data associated to this key. */
-    size_t key_len;
-    size_t start_len;
-    size_t end_len;
+    size_t key_len;         /* Current key length. */
+    size_t key_max;         /* Max key len the current key buffer can hold. */
     unsigned char key_static_string[RAX_ITER_STATIC_LEN];
-    unsigned char start_static_string[RAX_ITER_STATIC_LEN];
-    unsigned char end_static_string[RAX_ITER_STATIC_LEN];
-    raxNode *node;          /* Current node. Only for not safe iterators. */
-    raxStack stack;
+    raxNode *node;          /* Current node. Only for unsafe iteration. */
+    raxStack stack;         /* Stack used for unsafe iteration. */
 } raxIterator;
 
 /* A special pointer returned for not found items. */
