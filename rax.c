@@ -999,6 +999,11 @@ void raxIteratorDelChars(raxIterator *it, size_t count) {
  *
  * The function returns 1 on success or 0 on out of memory. */
 int raxIteratorNextStep(raxIterator *it, int noup) {
+    if (it->flags & RAX_ITER_JUST_SEEKED) {
+        it->flags &= ~RAX_ITER_JUST_SEEKED;
+        return 1;
+    }
+
     /* Save key len, stack items and the node where we are currently
      * so that on iterator EOF we can restore the current item, and the
      * iteration can continue, for example, in the opposite direction. */
@@ -1087,6 +1092,11 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
 /* Like raxIteratorNextStep() but implements an iteration step moving
  * to the lexicographically previous element. */
 int raxIteratorPrevStep(raxIterator *it, int noup) {
+    if (it->flags & RAX_ITER_JUST_SEEKED) {
+        it->flags &= ~RAX_ITER_JUST_SEEKED;
+        return 1;
+    }
+
     /* Save key len, stack items and the node where we are currently
      * so that on iterator EOF we can restore the current item, and the
      * iteration can continue, for example, in the opposite direction. */
@@ -1120,7 +1130,7 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
         int todel = it->node->iscompr ? it->node->size : 1;
         raxIteratorDelChars(it,todel);
 
-        /* Try visitng the prev child if there was at least one
+        /* Try visiting the prev child if there was at least one
          * additional child. */
         if (!it->node->iscompr && it->node->size > 1) {
             raxNode **cp = raxNodeLastChildPtr(it->node);
@@ -1235,24 +1245,76 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
         }
         raxStackPop(&it->stack);
 
-        /* Our current sting, needs to represent a string that in theory
-         * could be part of that node, so we need to add one more character
-         * that represents the mismatched char where the tree traversal
-         * stopped. */
-        if (!raxIteratorAddChars(it,ele+i,1)) return 0;
-        debugf("Seek: %.*s\n", (int)it->key_len, (char*)it->key);
+        /* We need to set the iterator in the correct state to call next/prev
+         * step in order to seek the desired element. */
+        debugf("After initial seek: i=%d len=%d key=%.*s\n",
+            (int)i, (int)len, (int)it->key_len, it->key);
+        if (i != len && !it->node->iscompr) {
+            /* If we stopped in the middle of a normal node because of a
+             * mismatch, add the mismatching character to the current key
+             * and call the iterator with the 'noup' flag so that it will try
+             * to seek the next/prev child in the current node directly based
+             * on the mismatching character. */
+            if (!raxIteratorAddChars(it,ele+i,1)) return 0;
+            debugf("Seek normal node on mismatch: %.*s\n",
+                (int)it->key_len, (char*)it->key);
 
-        /* Now call prev/next as needed. Clear the just seeked flag before
-         * to proceed otherwise the next/prev functions will refuse to actually
-         * move to the next character. */
-        it->flags &= ~RAX_ITER_JUST_SEEKED;
-        if (lt) raxIteratorPrevStep(it,1); /* Seek previous element. */
-        if (gt) raxIteratorNextStep(it,1); /* Seek next element. */
-
-        /* Then set it again, since the element we seeked must be returned
-         * in the next iteration, so the first next/prev call should have
-         * no effect. */
-        it->flags |= RAX_ITER_JUST_SEEKED;
+            it->flags &= ~RAX_ITER_JUST_SEEKED;
+            if (lt) raxIteratorPrevStep(it,1); /* Seek previous element. */
+            if (gt) raxIteratorNextStep(it,1); /* Seek next element. */
+            it->flags |= RAX_ITER_JUST_SEEKED; /* Ignore next call. */
+        } else if (i != len && it->node->iscompr) {
+            debugf("Compressed mismatch: %.*s\n",
+                (int)it->key_len, (char*)it->key);
+            /* In case of a mismatch within a compressed node. */
+            int nodechar = it->node->data[splitpos];
+            int keychar = ele[i];
+            it->flags &= ~RAX_ITER_JUST_SEEKED;
+            if (gt) {
+                /* If the key the compressed node represents is greater
+                 * than our seek element, continue forward, otherwise set the
+                 * state in order to go back to the next sub-tree. */
+                if (nodechar > keychar) {
+                    raxIteratorNextStep(it,0);
+                } else {
+                    if (!raxIteratorAddChars(it,it->node->data,it->node->size))
+                        return 0;
+                    raxIteratorNextStep(it,1);
+                }
+            }
+            if (lt) {
+                /* If the key the compressed node represents is smaller
+                 * than our seek element, seek the greater key in this
+                 * subtree, otherwise set the state in order to go back to
+                 * the previous sub-tree. */
+                if (nodechar < keychar) {
+                    do {
+                        if (!raxIteratorAddChars(it,it->node->data,
+                            it->node->iscompr ? it->node->size : 1)) return 0;
+                        raxNode **cp = raxNodeLastChildPtr(it->node);
+                        raxStackPush(&it->stack,it->node);
+                        memcpy(&it->node,cp,sizeof(it->node));
+                    } while(it->node->size);
+                } else {
+                    if (!raxIteratorAddChars(it,it->node->data,it->node->size))
+                        return 0;
+                    raxIteratorPrevStep(it,1);
+                }
+            }
+            it->flags |= RAX_ITER_JUST_SEEKED; /* Ignore next call. */
+        } else {
+            debugf("No mismatch: %.*s\n",
+                (int)it->key_len, (char*)it->key);
+            /* If there was no mismatch we are into a node representing the
+             * key, (but which is not a key or the seek operator does not
+             * include 'eq'), or we stopped in the middle of a compressed node
+             * after processing all the key. Cotinue iterating as this was
+             * a legitimate key we stopped at. */
+            it->flags &= ~RAX_ITER_JUST_SEEKED;
+            if (gt) raxIteratorNextStep(it,0);
+            if (lt) raxIteratorPrevStep(it,0);
+            it->flags |= RAX_ITER_JUST_SEEKED; /* Ignore next call. */
+        }
     }
     return 1;
 }
@@ -1500,14 +1562,34 @@ int main(void) {
     long items = 0;
     while(toadd[items] != NULL) items++;
 
-    for (long i = 0; i < items; i++)
+    for (long i = 0; i < items; i++) {
         raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
+        printf("Added %s\n", toadd[i]);
+    }
     raxShow(t);
 
     raxIterator iter;
     raxStart(&iter,t);
-    raxSeek(&iter,(unsigned char*)"rpxxx",5,">=");
 
+    // OK
+    // raxSeek(&iter,(unsigned char*)"rpxxx",5,"<=");
+    // raxSeek(&iter,(unsigned char*)"rom",3,">=");
+    // raxSeek(&iter,(unsigned char*)"rub",3,">=");
+    // raxSeek(&iter,(unsigned char*)"rub",3,">");
+    // raxSeek(&iter,(unsigned char*)"rub",3,"<");
+    // raxSeek(&iter,(unsigned char*)"rom",3,">");
+    // raxSeek(&iter,(unsigned char*)"chro",4,">");
+    // raxSeek(&iter,(unsigned char*)"chro",4,"<");
+
+    // STILL TO TEST
+    raxSeek(&iter,(unsigned char*)"chromz",6,"<");
+
+    printf("SEEKED: %.*s, val %p\n", (int)iter.key_len,
+                                     (char*)iter.key,
+                                     iter.data);
+    exit(1);
+
+    printf("NEXT\n");
     while(raxNext(&iter,NULL,0,NULL)) {
         printf("--- key: %.*s, val %p\n", (int)iter.key_len,
                                       (char*)iter.key,
@@ -1518,22 +1600,16 @@ int main(void) {
                                       (char*)iter.key);
     printf("~~~~~~~~~~~~~~\n");
 
+    printf("PREV\n");
+    raxSeek(&iter,(unsigned char*)"rpxxx",5,">="); /* OK */
     while(raxPrev(&iter,NULL,0,NULL)) {
         printf("--- key: %.*s, val %p\n", (int)iter.key_len,
                                       (char*)iter.key,
                                       iter.data);
     }
 
-    printf("~~~~~~~~~~~~~~\n");
-
-    while(raxNext(&iter,NULL,0,NULL)) {
-        printf("--- key: %.*s, val %p\n", (int)iter.key_len,
-                                      (char*)iter.key,
-                                      iter.data);
-    }
-
-    printf("%p\n", raxFind(t,"alliga",6));
-
+    printf("After EOF element is: %.*s\n", (int)iter.key_len,
+                                      (char*)iter.key);
 
 #if 0
     raxStop(&iter);

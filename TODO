@@ -51,7 +51,11 @@ ASAP
 * Make sure that the raxPrev() call when returning EOF does not have the
   same problem of making raxNext() impossible.
 * Set errno to ENOENT / ENOMEM in raxNext()/raxPrev().
-* Fix iterator seek if the seek string ends in the middle of a compressed node.
+
+ITERATOR
+===
+
+* Check and fix what happens if after the seek we are already in EOF condition.
 
 FUTURE
 ===
