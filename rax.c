@@ -260,8 +260,12 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
  * 's' of 'len' bytes. The function returns the number of characters
  * of the key that was possible to process: if the returned integer
  * is the same as 'len', then it means that the node corresponding to the
- * string was found (however it may not be a key, node->iskey == 0).
- * Otherwise there was an early stop.
+ * string was found (however it may not be a key in case the node->iskey is
+ * zero or if simply we stopped in the middle of a compressed node, so that
+ * 'splitpos' is non zero).
+ *
+ * Otherwise if the returned integer is not the same as 'len', there was an
+ * early stop during the tree walk because of a character mismatch.
  *
  * The node where the search ended (because the full string was processed
  * or because there was an early stop) is returned by reference as
@@ -645,10 +649,11 @@ void *raxFind(rax *rax, unsigned char *s, size_t len) {
     raxNode *h;
 
     debugf("### Lookup: %.*s\n", (int)len, s);
-    size_t i = raxLowWalk(rax,s,len,&h,NULL,NULL,NULL);
-    if (i != len) return raxNotFound;
-    debugf("Lookup final node: [%p] iskey? %d\n",(void*)h,h->iskey);
-    return h->iskey ? raxGetData(h) : raxNotFound;
+    int splitpos = 0;
+    size_t i = raxLowWalk(rax,s,len,&h,NULL,&splitpos,NULL);
+    if (i != len || (h->iscompr && splitpos != 0) || !h->iskey)
+        return raxNotFound;
+    return raxGetData(h);
 }
 
 /* Return the memory address where the 'parent' node stores the specified
@@ -738,8 +743,9 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
 
     debugf("### Delete: %.*s\n", (int)len, s);
     raxStackInit(&ts);
+    int splitpos = 0;
     size_t i = raxLowWalk(rax,s,len,&h,NULL,NULL,&ts);
-    if (i != len || !h->iskey) {
+    if (i != len || (h->iscompr && splitpos != 0) || !h->iskey) {
         raxStackFree(&ts);
         return 0;
     }
@@ -1193,8 +1199,11 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     /* We need to seek the specified key. What we do here is to actually
      * perform a lookup, and later invoke the prev/next key code that
      * we already use for iteration. */
-    size_t i = raxLowWalk(it->rt,ele,len,&it->node,NULL,NULL,&it->stack);
-    if (i == len && eq) {
+    int splitpos;
+    size_t i = raxLowWalk(it->rt,ele,len,&it->node,NULL,&splitpos,&it->stack);
+    if (eq && i == len && (!it->node->iscompr || splitpos == 0) &&
+        it->node->iskey)
+    {
         /* We found our node, since the key matches and we have an
          * "equal" condition. */
         if (!raxIteratorAddChars(it,ele,len)) return 0; /* OOM. */
