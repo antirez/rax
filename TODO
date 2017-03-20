@@ -56,6 +56,7 @@ ITERATOR
 ===
 
 * Check and fix what happens if after the seek we are already in EOF condition.
+* Implement "$"
 
 FUTURE
 ===

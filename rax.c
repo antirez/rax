@@ -985,10 +985,10 @@ void raxIteratorDelChars(raxIterator *it, size_t count) {
     it->key_len -= count;
 }
 
-/* Do an iteration step towards prev/next element according to 'prev'
- * (of 0 next, if non-zero prev). At the end of the step the iterator
- * key will represent the current key. If it is not possible to step in the
- * specified direction, the iterator is flagged with RAX_ITER_EOF.
+/* Do an iteration step towards the next element. At the end of the step the
+ * iterator key will represent the (new) current key. If it is not possible
+ * to step in the specified direction since there are no longer elements, the
+ * iterator is flagged with RAX_ITER_EOF.
  *
  * If 'noup' is true, during the scanning of the first/last, the current
  * node is already assumed to be the parent of the last key node, so the
@@ -999,7 +999,9 @@ void raxIteratorDelChars(raxIterator *it, size_t count) {
  *
  * The function returns 1 on success or 0 on out of memory. */
 int raxIteratorNextStep(raxIterator *it, int noup) {
-    if (it->flags & RAX_ITER_JUST_SEEKED) {
+    if (it->flags & RAX_ITER_EOF) {
+        return 0;
+    } else if (it->flags & RAX_ITER_JUST_SEEKED) {
         it->flags &= ~RAX_ITER_JUST_SEEKED;
         return 1;
     }
@@ -1041,7 +1043,7 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
              * current key. */
             while(1) {
                 /* Already on head? Can't go up, iteration finished. */
-                if (it->node == it->rt->head) {
+                if (!noup && it->node == it->rt->head) {
                     it->flags |= RAX_ITER_EOF;
                     it->stack.items = orig_stack_items;
                     it->key_len = orig_key_len;
@@ -1092,7 +1094,9 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
 /* Like raxIteratorNextStep() but implements an iteration step moving
  * to the lexicographically previous element. */
 int raxIteratorPrevStep(raxIterator *it, int noup) {
-    if (it->flags & RAX_ITER_JUST_SEEKED) {
+    if (it->flags & RAX_ITER_EOF) {
+        return 0;
+    } else if (it->flags & RAX_ITER_JUST_SEEKED) {
         it->flags &= ~RAX_ITER_JUST_SEEKED;
         return 1;
     }
@@ -1104,13 +1108,9 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     size_t orig_stack_items = it->stack.items;
     raxNode *orig_node = it->node;
 
-    /* Clear the EOF flag: it will be set again if the EOF condition
-     * is still valid. */
-    it->flags &= ~RAX_ITER_EOF;
-
     while(1) {
         /* Already on head? Can't go up, iteration finished. */
-        if (it->node == it->rt->head) {
+        if (!noup && it->node == it->rt->head) {
             it->flags |= RAX_ITER_EOF;
             it->stack.items = orig_stack_items;
             it->key_len = orig_key_len;
@@ -1185,7 +1185,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
 
     it->stack.items = 0;
     it->flags |= RAX_ITER_JUST_SEEKED;
-    it->flags &= ~RAX_ITER_NEVER_SEEKED;
+    it->flags &= ~(RAX_ITER_NEVER_SEEKED|RAX_ITER_EOF);
     it->key_len = 0;
     it->node = NULL;
 
@@ -1205,6 +1205,8 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     } else {
         return 0; /* Error. */
     }
+
+    if (first) return raxSeek(it,NULL,0,">=");
 
     /* We need to seek the specified key. What we do here is to actually
      * perform a lookup, and later invoke the prev/next key code that
@@ -1571,7 +1573,7 @@ int main(void) {
     raxIterator iter;
     raxStart(&iter,t);
 
-    // OK
+    // OK: all this tests will need to go in the Rax unit test.
     // raxSeek(&iter,(unsigned char*)"rpxxx",5,"<=");
     // raxSeek(&iter,(unsigned char*)"rom",3,">=");
     // raxSeek(&iter,(unsigned char*)"rub",3,">=");
@@ -1580,14 +1582,17 @@ int main(void) {
     // raxSeek(&iter,(unsigned char*)"rom",3,">");
     // raxSeek(&iter,(unsigned char*)"chro",4,">");
     // raxSeek(&iter,(unsigned char*)"chro",4,"<");
+    // raxSeek(&iter,(unsigned char*)"chromz",6,"<");
+    // raxSeek(&iter,NULL,0,"^");
+    // raxSeek(&iter,"zorro",5,"<=");
 
     // STILL TO TEST
-    raxSeek(&iter,(unsigned char*)"chromz",6,"<");
+    raxSeek(&iter,"zorro",5,"<");
+    printf("EOF: %d\n", (iter.flags & RAX_ITER_EOF) != 0);
 
     printf("SEEKED: %.*s, val %p\n", (int)iter.key_len,
                                      (char*)iter.key,
                                      iter.data);
-    exit(1);
 
     printf("NEXT\n");
     while(raxNext(&iter,NULL,0,NULL)) {
@@ -1601,7 +1606,7 @@ int main(void) {
     printf("~~~~~~~~~~~~~~\n");
 
     printf("PREV\n");
-    raxSeek(&iter,(unsigned char*)"rpxxx",5,">="); /* OK */
+    raxSeek(&iter,iter.key,iter.key_len,"==");
     while(raxPrev(&iter,NULL,0,NULL)) {
         printf("--- key: %.*s, val %p\n", (int)iter.key_len,
                                       (char*)iter.key,
