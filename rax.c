@@ -948,14 +948,15 @@ void raxFree(rax *rax) {
 /* ------------------------------- Iterator --------------------------------- */
 
 /* Initialize a Rax iterator. This call should be performed a single time
- * to initialize the iterator, and can be followed by either raxNext() or
- * raxPrev() directly, or raxSeek() if we want to seek the iterator to a
- * specific position. When the iterator is no longer useful, raxStop() should
- * be called. */
+ * to initialize the iterator, and must be followed by a raxSeek() call,
+ * otherwise the raxPrev()/raxNext() functions will just return EOF. */
 void raxStart(raxIterator *it, rax *rt) {
-    it->flags = RAX_ITER_NEVER_SEEKED;
+    it->flags = RAX_ITER_EOF; /* No crash if the iterator is not seeked. */
     it->rt = rt;
-    it->key = NULL;
+    it->key_len = 0;
+    it->key = it->key_static_string;
+    it->key_max = RAX_ITER_STATIC_LEN;
+    raxStackInit(&it->stack);
 }
 
 /* Append characters at the current key string of the iterator 'it'. This
@@ -1184,21 +1185,15 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     }
 }
 
-/* Initialize and seek an iterator at the specified element.
+/* Seek an iterator at the specified element.
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
  * 1 is returned. */
 int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
-    if (it->key != it->key_static_string) {
-        free(it->key);
-        it->key = it->key_static_string;
-        it->key_max = RAX_ITER_STATIC_LEN;
-    }
-
-    it->stack.items = 0;
+    it->stack.items = 0; /* Just resetting. Intialized by raxStart(). */
     it->flags |= RAX_ITER_JUST_SEEKED;
-    it->flags &= ~(RAX_ITER_NEVER_SEEKED|RAX_ITER_EOF);
+    it->flags &= ~RAX_ITER_EOF;
     it->key_len = 0;
     it->node = NULL;
 
@@ -1364,6 +1359,12 @@ int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
     raxIteratorPrevStep(it,0);
     if (it->flags & RAX_ITER_EOF) return 0;
     return 1;
+}
+
+/* Free the iterator. */
+void raxStop(raxIterator *it) {
+    if (it->key != it->key_static_string) free(it->key);
+    raxStackFree(&it->stack);
 }
 
 /* ----------------------------- Introspection ------------------------------ */
@@ -1649,6 +1650,7 @@ int main(void) {
 
     printf("After EOF element is: %.*s\n", (int)iter.key_len,
                                       (char*)iter.key);
+    raxStop(&iter);
 
 #if 0
     raxStop(&iter);
