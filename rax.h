@@ -143,4 +143,7 @@ extern void *raxNotFound;
 extern unsigned char *raxFirst;
 extern unsigned char *raxLast;
 
+/* Exported API. */
+int raxRemove(rax *rax, unsigned char *s, size_t len);
+
 #endif

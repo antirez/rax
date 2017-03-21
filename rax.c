@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
+#include <errno.h>
 #include "rax.h"
 
 /* This is a special pointer that is guaranteed to never have the same value
@@ -48,11 +49,16 @@ static inline int raxStackPush(raxStack *ts, void *ptr) {
     if (ts->items == ts->maxitems) {
         if (ts->stack == ts->static_items) {
             ts->stack = malloc(sizeof(void*)*ts->maxitems*2);
+            if (ts->stack == NULL) {
+                ts->stack = ts->static_items;
+                return 0;
+            }
             memcpy(ts->stack,ts->static_items,sizeof(void*)*ts->maxitems);
         } else {
-            ts->stack = realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
+            void **newalloc = realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
+            if (newalloc == NULL) return 0;
+            ts->stack = newalloc;
         }
-        if (ts->stack == NULL) return 0;
         ts->maxitems *= 2;
     }
     ts->stack[ts->items] = ptr;
@@ -84,11 +90,16 @@ static inline void raxStackFree(raxStack *ts) {
  * Radis tree implementation
  * --------------------------------------------------------------------------*/
 
-/* Allocate a new non compressed node with the specified number of children. */
-raxNode *raxNewNode(size_t children) {
+/* Allocate a new non compressed node with the specified number of children.
+ * If datafiled is true, the allocation is made large enough to hold the
+ * associated data pointer.
+ * Returns the new node pointer. On out of memory NULL is returned. */
+raxNode *raxNewNode(size_t children, int datafield) {
     size_t nodesize = sizeof(raxNode)+children+
                       sizeof(raxNode*)*children;
+    if (datafield) nodesize += sizeof(void*);
     raxNode *node = malloc(nodesize);
+    if (node == NULL) return NULL;
     node->iskey = 0;
     node->isnull = 0;
     node->iscompr = 0;
@@ -96,13 +107,19 @@ raxNode *raxNewNode(size_t children) {
     return node;
 }
 
-/* Allocate a new rax. */
+/* Allocate a new rax and return its pointer. On out of memory the function
+ * returns NULL. */
 rax *raxNew(void) {
     rax *rax = malloc(sizeof(*rax));
     rax->numele = 0;
     rax->numnodes = 1;
-    rax->head = raxNewNode(0);
-    return rax;
+    rax->head = raxNewNode(0,0);
+    if (rax->head == NULL) {
+        free(rax);
+        return NULL;
+    } else {
+        return rax;
+    }
 }
 
 /* Return the current total size of the node. */
@@ -113,7 +130,7 @@ rax *raxNew(void) {
 )
 
 /* Realloc the node to make room for auxiliary data in order
- * to store an item in that node. */
+ * to store an item in that node. On out of memory NULL is returned. */
 raxNode *raxReallocForData(raxNode *n, void *data) {
     if (data == NULL) return n; /* No reallocation needed, setting isnull=1 */
     size_t curlen = raxNodeCurrentLength(n);
@@ -146,16 +163,32 @@ void *raxGetData(raxNode *n) {
  * its new pointer, as well as the child pointer by reference. Additionally
  * '***parentlink' is populated with the raxNode pointer-to-pointer of where
  * the new child was stored, which is useful for the caller to replace the
- * child pointer if it gets reallocated. */
+ * child pointer if it gets reallocated.
+ *
+ * On success the new parent node pointer is returned (it may change because
+ * of the realloc, so the caller should discard 'n' and use the new value).
+ * On out of memory NULL is returned, and the old node is still valid. */
 raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr, raxNode ***parentlink) {
     assert(n->iscompr == 0);
+
     size_t curlen = sizeof(raxNode)+
                     n->size+
                     sizeof(raxNode*)*n->size;
     size_t newlen;
+
+    /* Alloc the new child we will link to 'n'. */
+    raxNode *child = raxNewNode(0,0);
+    if (child == NULL) return NULL;
+
+    /* Make space in the original node. */
     if (n->iskey) curlen += sizeof(void*);
     newlen = curlen+sizeof(raxNode*)+1; /* Add 1 char and 1 pointer. */
-    n = realloc(n,newlen);
+    raxNode *newn = realloc(n,newlen);
+    if (newn == NULL) {
+        free(child);
+        return NULL;
+    }
+    n = newn;
 
     /* After the reallocation, we have 5/9 (depending on the system
      * pointer size) bytes at the end, that is, the additional char
@@ -202,7 +235,6 @@ raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr, raxNode ***parentli
      *
      * [numc][abcx][ap][bp][cp]....|auxp|
      * [numc][abcx][ap][bp][cp][xp]|auxp| */
-    raxNode *child = raxNewNode(0);
     n->data[pos] = c;
     n->size++;
     raxNode **childfield = (raxNode**)(n->data+n->size+sizeof(raxNode*)*pos);
@@ -239,19 +271,28 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
 
     debugf("Compress node: %.*s\n", (int)len,s);
 
+    /* Allocate the child to link to this node. */
+    *child = raxNewNode(0,0);
+    if (*child == NULL) return NULL;
+
+    /* Make space in the parent node. */
     newsize = sizeof(raxNode)+len+sizeof(raxNode*);
     if (n->iskey) {
         data = raxGetData(n); /* To restore it later. */
         if (!n->isnull) newsize += sizeof(void*);
     }
+    raxNode *newn = realloc(n,newsize);
+    if (newn == NULL) {
+        free(*child);
+        return NULL;
+    }
+    n = newn;
 
-    n = realloc(n,newsize);
     n->iscompr = 1;
     n->size = len;
     memcpy(n->data,s,len);
     if (n->iskey) raxSetData(n,data);
     raxNode **childfield = raxNodeLastChildPtr(n);
-    *child = raxNewNode(0);
     memcpy(childfield,&child,sizeof(child));
     return n;
 }
@@ -319,7 +360,8 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
 /* Insert the element 's' of size 'len', setting as auxiliary data
  * the pointer 'data'. If the element is already present, the associated
  * data is updated, and 0 is returned, otherwise the element is inserted
- * and 1 is returned. */
+ * and 1 is returned. On out of memory the function returns 0 as well but
+ * sets errno to ENOMEM, otherwise errno will be set to 0. */
 int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
     size_t i;
     int j = 0; /* Split position. If raxLowWalk() stops in a compressed
@@ -339,9 +381,14 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
     if (i == len && (!h->iscompr || j == 0 /* not in the middle if j is 0 */)) {
         if (h->iskey) {
             raxSetData(h,data);
+            errno = 0;
             return 0; /* Element already exists. */
         }
         h = raxReallocForData(h,data);
+        if (h == NULL) {
+            errno = ENOMEM;
+            return 0;
+        }
         memcpy(parentlink,&h,sizeof(h));
         raxSetData(h,data);
         rax->numele++;
@@ -491,14 +538,17 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         }
 
         /* 2: Create the split node. */
-        raxNode *splitnode = raxNewNode(1);
+        raxNode *splitnode = raxNewNode(1, (j==0 && h->iskey));
+        if (splitnode == NULL) {
+            errno = ENOMEM;
+            return 0;
+        }
         splitnode->data[0] = h->data[j];
 
         if (j == 0) {
             /* 3a: Replace the old node with the split node. */
             if (h->iskey) {
                 void *ndata = raxGetData(h);
-                splitnode = raxReallocForData(splitnode,ndata);
                 raxSetData(splitnode,ndata);
             }
             memcpy(parentlink,&splitnode,sizeof(splitnode));
@@ -621,25 +671,40 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             size_t comprsize = len-i;
             if (comprsize > RAX_NODE_MAX_SIZE)
                 comprsize = RAX_NODE_MAX_SIZE;
-            h = raxCompressNode(h,s+i,comprsize,&child);
+            raxNode *newh = raxCompressNode(h,s+i,comprsize,&child);
+            if (newh == NULL) goto oom;
+            h = newh;
             memcpy(parentlink,&h,sizeof(h));
             parentlink = raxNodeLastChildPtr(h);
             i += comprsize;
         } else {
             debugf("Inserting normal node\n");
             raxNode **new_parentlink;
-            h = raxAddChild(h,s[i],&child,&new_parentlink);
+            raxNode *newh = raxAddChild(h,s[i],&child,&new_parentlink);
+            if (newh == NULL) goto oom;
+            h = newh;
             memcpy(parentlink,&h,sizeof(h));
             parentlink = new_parentlink;
             i++;
         }
         h = child;
     }
+    raxNode *newh = raxReallocForData(h,data);
+    if (newh == NULL) goto oom;
+    h = newh;
     if (!h->iskey) rax->numele++;
-    h = raxReallocForData(h,data);
     raxSetData(h,data);
     memcpy(parentlink,&h,sizeof(h));
     return 1; /* Element inserted. */
+
+oom:
+    /* This code path handles out of memory after part of the sub-tree was
+     * already added. Set the node as a key, and then remove it. */
+    h->isnull = 1;
+    h->iskey = 1;
+    raxRemove(rax,s,i);
+    errno = ENOMEM;
+    return 0;
 }
 
 /* Find a key in the rax, returns raxNotFound special void pointer value
@@ -674,21 +739,22 @@ raxNode **raxFindParentLink(raxNode *parent, raxNode *child) {
 
 /* Low level child removal from node. The new node pointer (after the child
  * removal) is returned. Note that this function does not fix the pointer
- * of the node in its parent, so this task is up to the caller. */
+ * of the parent node in its parent, so this task is up to the caller.
+ * The function never fails for out of memory. */
 raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     debugnode("raxRemoveChild before", parent);
     /* If parent is a compressed node (having a single child, as for definition
      * of the data structure), the removal of the child consists into turning
      * it into a normal node without children. */
     if (parent->iscompr) {
-        raxNode *newnode = raxNewNode(0);
-        if (parent->iskey) {
-            void *data = raxGetData(parent);
-            newnode = raxReallocForData(newnode,data);
-            raxSetData(newnode,data);
-        }
-        debugnode("raxRemoveChild after", newnode);
-        return newnode;
+        void *data = NULL;
+        if (parent->iskey) data = raxGetData(parent);
+        parent->isnull = 0;
+        parent->iscompr = 0;
+        parent->size = 0;
+        if (parent->iskey) raxSetData(parent,data);
+        debugnode("raxRemoveChild after", parent);
+        return parent;
     }
 
     /* Otherwise we need to scan for the children pointer and memmove()
