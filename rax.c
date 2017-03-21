@@ -960,7 +960,7 @@ void raxStart(raxIterator *it, rax *rt) {
 
 /* Append characters at the current key string of the iterator 'it'. This
  * is a low level function used to implement the iterator, not callable by
- * the user. */
+ * the user. Returns 0 on out of memory, otherwise 1 is returned. */
 int raxIteratorAddChars(raxIterator *it, unsigned char *s, size_t len) {
     if (it->key_max < it->key_len+len) {
         unsigned char *old = (it->key == it->key_static_string) ? NULL :
@@ -990,12 +990,13 @@ void raxIteratorDelChars(raxIterator *it, size_t count) {
  * to step in the specified direction since there are no longer elements, the
  * iterator is flagged with RAX_ITER_EOF.
  *
- * If 'noup' is true, during the scanning of the first/last, the current
- * node is already assumed to be the parent of the last key node, so the
- * first operation to go back to the parent will be skipped. This option is
- * used by raxSeek() when implementing seeking a non existing element with
- * the ">" or "<" options: the starting node is not a key in that particular
- * case.
+ * If 'noup' is true the function starts directly scanning for the next
+ * lexicographically smaller children, and the current node is already assumed
+ * to be the parent of the last key node, so the first operation to go back to
+ * the parent will be skipped. This option is used by raxSeek() when
+ * implementing seeking a non existing element with the ">" or "<" options:
+ * the starting node is not a key in that particular case, so we start the scan
+ * from a node that does not represent the key set.
  *
  * The function returns 1 on success or 0 on out of memory. */
 int raxIteratorNextStep(raxIterator *it, int noup) {
@@ -1007,8 +1008,7 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
     }
 
     /* Save key len, stack items and the node where we are currently
-     * so that on iterator EOF we can restore the current item, and the
-     * iteration can continue, for example, in the opposite direction. */
+     * so that on iterator EOF we can restore the current key and state. */
     size_t orig_key_len = it->key_len;
     size_t orig_stack_items = it->stack.items;
     raxNode *orig_node = it->node;
@@ -1091,8 +1091,28 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
     }
 }
 
+/* Seek the grestest key in the subtree at the current node. Return 0 on
+ * out of memory, otherwise 1. This is an helper function for different
+ * iteration functions below. */
+int raxSeekGreatest(raxIterator *it) {
+    while(it->node->size) {
+        if (it->node->iscompr) {
+            if (!raxIteratorAddChars(it,it->node->data,
+                it->node->size)) return 0;
+        } else {
+            if (!raxIteratorAddChars(it,it->node->data+it->node->size-1,1))
+                return 0;
+        }
+        raxNode **cp = raxNodeLastChildPtr(it->node);
+        raxStackPush(&it->stack,it->node);
+        memcpy(&it->node,cp,sizeof(it->node));
+    }
+    return 1;
+}
+
 /* Like raxIteratorNextStep() but implements an iteration step moving
- * to the lexicographically previous element. */
+ * to the lexicographically previous element. The 'noup' option has a similar
+ * effect to the one of raxIteratorPrevSte(). */
 int raxIteratorPrevStep(raxIterator *it, int noup) {
     if (it->flags & RAX_ITER_EOF) {
         return 0;
@@ -1102,8 +1122,7 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     }
 
     /* Save key len, stack items and the node where we are currently
-     * so that on iterator EOF we can restore the current item, and the
-     * iteration can continue, for example, in the opposite direction. */
+     * so that on iterator EOF we can restore the current key and state. */
     size_t orig_key_len = it->key_len;
     size_t orig_stack_items = it->stack.items;
     raxNode *orig_node = it->node;
@@ -1145,23 +1164,18 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
              * go deeper following all the last children in order to
              * find the key lexicographically greater. */
             if (i != -1) {
-                do {
-                    debugf("SCAN found a new node\n");
-                    if (it->node->iscompr) {
-                        raxIteratorAddChars(it,it->node->data,it->node->size);
-                    } else {
-                        raxIteratorAddChars(it,it->node->data+i,1);
-                    }
-                    raxStackPush(&it->stack,it->node);
-                    memcpy(&it->node,cp,sizeof(it->node));
-                    i = it->node->size-1; /* Last child index. */
-                    if (it->node->size) cp = raxNodeLastChildPtr(it->node);
-                } while(it->node->size);
+                debugf("SCAN found a new node\n");
+                /* Enter the node we just found. */
+                if (!raxIteratorAddChars(it,it->node->data+i,1)) return 0;
+                raxStackPush(&it->stack,it->node);
+                memcpy(&it->node,cp,sizeof(it->node));
+                /* Seek sub-tree max. */
+                if (!raxSeekGreatest(it)) return 0;
             }
         }
 
         /* Return the key: this could be the key we found scanning a new
-         * subtree, or we did not find a new subtree to explore here, but
+         * subtree, or if we did not find a new subtree to explore here,
          * before giving up with this node, check if it's a key itself. */
         if (it->node->iskey) {
             it->data = raxGetData(it->node);
@@ -1169,7 +1183,6 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
         }
     }
 }
-
 
 /* Initialize and seek an iterator at the specified element.
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
@@ -1206,7 +1219,27 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
         return 0; /* Error. */
     }
 
-    if (first) return raxSeek(it,NULL,0,">=");
+    /* If there are no elements, set the EOF condition immediately and
+     * return. */
+    if (it->rt->numele == 0) {
+        it->flags |= RAX_ITER_EOF;
+        return 1;
+    }
+
+    if (first) {
+        /* Seeking the first key greater or equal to the empty string
+         * is equivalent to seeking the smaller key available. */
+        return raxSeek(it,NULL,0,">=");
+    }
+
+    if (last) {
+        /* Find the greatest key taking always the last child till a
+         * final node is found. */
+        it->node = it->rt->head;
+        if (!raxSeekGreatest(it)) return 0;
+        assert(it->node->iskey);
+        return 1;
+    }
 
     /* We need to seek the specified key. What we do here is to actually
      * perform a lookup, and later invoke the prev/next key code that
@@ -1290,13 +1323,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
                  * subtree, otherwise set the state in order to go back to
                  * the previous sub-tree. */
                 if (nodechar < keychar) {
-                    do {
-                        if (!raxIteratorAddChars(it,it->node->data,
-                            it->node->iscompr ? it->node->size : 1)) return 0;
-                        raxNode **cp = raxNodeLastChildPtr(it->node);
-                        raxStackPush(&it->stack,it->node);
-                        memcpy(&it->node,cp,sizeof(it->node));
-                    } while(it->node->size);
+                    if (!raxSeekGreatest(it)) return 0;
                 } else {
                     if (!raxIteratorAddChars(it,it->node->data,it->node->size))
                         return 0;
@@ -1321,12 +1348,18 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     return 1;
 }
 
+/* Go to the next element in the scope of the iterator 'it'.
+ * If EOF (or out of memory) is reached, 0 is returned, otherwise 1 is
+ * returned. */
 int raxNext(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
     raxIteratorNextStep(it,0);
     if (it->flags & RAX_ITER_EOF) return 0;
     return 1;
 }
 
+/* Go to the previous element in the scope of the iterator 'it'.
+ * If EOF (or out of memory) is reached, 0 is returned, otherwise 1 is
+ * returned. */
 int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
     raxIteratorPrevStep(it,0);
     if (it->flags & RAX_ITER_EOF) return 0;
@@ -1585,9 +1618,10 @@ int main(void) {
     // raxSeek(&iter,(unsigned char*)"chromz",6,"<");
     // raxSeek(&iter,NULL,0,"^");
     // raxSeek(&iter,"zorro",5,"<=");
+    // raxSeek(&iter,"zorro",5,"<");
 
     // STILL TO TEST
-    raxSeek(&iter,"zorro",5,"<");
+    raxSeek(&iter,NULL,0,"$");
     printf("EOF: %d\n", (iter.flags & RAX_ITER_EOF) != 0);
 
     printf("SEEKED: %.*s, val %p\n", (int)iter.key_len,
