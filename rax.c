@@ -956,6 +956,7 @@ void raxStart(raxIterator *it, rax *rt) {
     it->key_len = 0;
     it->key = it->key_static_string;
     it->key_max = RAX_ITER_STATIC_LEN;
+    it->data = NULL;
     raxStackInit(&it->stack);
 }
 
@@ -975,7 +976,9 @@ int raxIteratorAddChars(raxIterator *it, unsigned char *s, size_t len) {
         if (old == NULL) memcpy(it->key,it->key_static_string,it->key_len);
         it->key_max = new_max;
     }
-    memcpy(it->key+it->key_len,s,len);
+    /* Use memmove since there could be an overlap between 's' and
+     * it->key when we use the current key in order to re-seek. */
+    memmove(it->key+it->key_len,s,len);
     it->key_len += len;
     return 1;
 }
@@ -1239,7 +1242,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     /* We need to seek the specified key. What we do here is to actually
      * perform a lookup, and later invoke the prev/next key code that
      * we already use for iteration. */
-    int splitpos;
+    int splitpos = 0;
     size_t i = raxLowWalk(it->rt,ele,len,&it->node,NULL,&splitpos,&it->stack);
     if (eq && i == len && (!it->node->iscompr || splitpos == 0) &&
         it->node->iskey)
