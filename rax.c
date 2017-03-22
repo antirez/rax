@@ -537,9 +537,38 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             debugf("key value is %p\n", raxGetData(h));
         }
 
-        /* 2: Create the split node. */
-        raxNode *splitnode = raxNewNode(1, (j==0 && h->iskey));
-        if (splitnode == NULL) {
+        /* Set the length of the additional nodes we will need. */
+        size_t trimmedlen = j;
+        size_t postfixlen = h->size - j - 1;
+        int split_node_is_key = !trimmedlen && h->iskey && !h->isnull;
+        size_t nodesize;
+
+        /* 2: Create the split node. Also allocate the other nodes we'll need
+         *    ASAP, so that it will be simpler to handle OOM. */
+        raxNode *splitnode = raxNewNode(1, split_node_is_key);
+        raxNode *trimmed = NULL;
+        raxNode *postfix = NULL;
+
+        if (trimmedlen) {
+            nodesize = sizeof(raxNode)+trimmedlen+sizeof(raxNode*);
+            if (h->iskey && !h->isnull) nodesize += sizeof(void*);
+            trimmed = malloc(nodesize);
+        }
+
+        if (postfixlen) {
+            nodesize = sizeof(raxNode)+postfixlen+
+                       sizeof(raxNode*);
+            postfix = malloc(nodesize);
+        }
+
+        /* OOM? Abort now that the tree is untouched. */
+        if (splitnode == NULL ||
+            (trimmedlen && trimmed == NULL) ||
+            (postfixlen && postfix == NULL))
+        {
+            free(splitnode);
+            free(trimmed);
+            free(postfix);
             errno = ENOMEM;
             return 0;
         }
@@ -554,9 +583,6 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             memcpy(parentlink,&splitnode,sizeof(splitnode));
         } else {
             /* 3b: Trim the compressed node. */
-            size_t nodesize = sizeof(raxNode)+j+sizeof(raxNode*);
-            if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-            raxNode *trimmed = malloc(nodesize);
             trimmed->size = j;
             memcpy(trimmed->data,h->data,j);
             trimmed->iscompr = j > 1 ? 1 : 0;
@@ -575,13 +601,8 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
 
         /* 4: Create the postfix node: what remains of the original
          * compressed node after the split. */
-        size_t postfixlen = h->size - j - 1;
-        raxNode *postfix;
         if (postfixlen) {
             /* 4a: create a postfix node. */
-            size_t nodesize = sizeof(raxNode)+postfixlen+
-                              sizeof(raxNode*);
-            postfix = malloc(nodesize);
             postfix->iskey = 0;
             postfix->isnull = 0;
             postfix->size = postfixlen;
@@ -609,16 +630,29 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         debugf("ALGO 2: Stopped at compressed node %.*s (%p) j = %d\n",
             h->size, h->data, (void*)h, j);
 
+        /* Allocate postfix & trimmed nodes ASAP to fail for OOM gracefully. */
+        size_t postfixlen = h->size - j;
+        size_t nodesize = sizeof(raxNode)+postfixlen+sizeof(raxNode*);
+        if (data != NULL) nodesize += sizeof(void*);
+        raxNode *postfix = malloc(nodesize);
+
+        nodesize = sizeof(raxNode)+j+sizeof(raxNode*);
+        if (h->iskey && !h->isnull) nodesize += sizeof(void*);
+        raxNode *trimmed = malloc(nodesize);
+
+        if (postfix == NULL || trimmed == NULL) {
+            free(postfix);
+            free(trimmed);
+            errno = ENOMEM;
+            return 0;
+        }
+
         /* 1: Save next pointer. */
         raxNode **childfield = raxNodeLastChildPtr(h);
         raxNode *next;
         memcpy(&next,childfield,sizeof(next));
 
         /* 2: Create the postfix node. */
-        size_t postfixlen = h->size - j;
-        size_t nodesize = sizeof(raxNode)+postfixlen+sizeof(raxNode*);
-        if (data != NULL) nodesize += sizeof(void*);
-        raxNode *postfix = malloc(nodesize);
         postfix->size = postfixlen;
         postfix->iscompr = postfixlen > 1;
         postfix->iskey = 1;
@@ -630,9 +664,6 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         rax->numnodes++;
 
         /* 3: Trim the compressed node. */
-        nodesize = sizeof(raxNode)+j+sizeof(raxNode*);
-        if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-        raxNode *trimmed = malloc(nodesize);
         trimmed->size = j;
         trimmed->iscompr = j > 1;
         trimmed->iskey = 0;
