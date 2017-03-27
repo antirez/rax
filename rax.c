@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include "rax.h"
+#include "rax_malloc.h"
 
 /* This is a special pointer that is guaranteed to never have the same value
  * of a radix tree node. It's used in order to report "not found" error without
@@ -79,7 +80,7 @@ static inline void raxStackInit(raxStack *ts) {
 static inline int raxStackPush(raxStack *ts, void *ptr) {
     if (ts->items == ts->maxitems) {
         if (ts->stack == ts->static_items) {
-            ts->stack = malloc(sizeof(void*)*ts->maxitems*2);
+            ts->stack = rax_malloc(sizeof(void*)*ts->maxitems*2);
             if (ts->stack == NULL) {
                 ts->stack = ts->static_items;
                 ts->oom = 1;
@@ -87,7 +88,7 @@ static inline int raxStackPush(raxStack *ts, void *ptr) {
             }
             memcpy(ts->stack,ts->static_items,sizeof(void*)*ts->maxitems);
         } else {
-            void **newalloc = realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
+            void **newalloc = rax_realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
             if (newalloc == NULL) {
                 ts->oom = 1;
                 return 0;
@@ -118,7 +119,7 @@ static inline void *raxStackPeek(raxStack *ts) {
 
 /* Free the stack in case we used heap allocation. */
 static inline void raxStackFree(raxStack *ts) {
-    if (ts->stack != ts->static_items) free(ts->stack);
+    if (ts->stack != ts->static_items) rax_free(ts->stack);
 }
 
 /* ----------------------------------------------------------------------------
@@ -133,7 +134,7 @@ raxNode *raxNewNode(size_t children, int datafield) {
     size_t nodesize = sizeof(raxNode)+children+
                       sizeof(raxNode*)*children;
     if (datafield) nodesize += sizeof(void*);
-    raxNode *node = malloc(nodesize);
+    raxNode *node = rax_malloc(nodesize);
     if (node == NULL) return NULL;
     node->iskey = 0;
     node->isnull = 0;
@@ -145,13 +146,13 @@ raxNode *raxNewNode(size_t children, int datafield) {
 /* Allocate a new rax and return its pointer. On out of memory the function
  * returns NULL. */
 rax *raxNew(void) {
-    rax *rax = malloc(sizeof(*rax));
+    rax *rax = rax_malloc(sizeof(*rax));
     if (rax == NULL) return NULL;
     rax->numele = 0;
     rax->numnodes = 1;
     rax->head = raxNewNode(0,0);
     if (rax->head == NULL) {
-        free(rax);
+        rax_free(rax);
         return NULL;
     } else {
         return rax;
@@ -165,12 +166,12 @@ rax *raxNew(void) {
     (((n)->iskey && !(n)->isnull)*sizeof(void*)) \
 )
 
-/* Realloc the node to make room for auxiliary data in order
+/* realloc the node to make room for auxiliary data in order
  * to store an item in that node. On out of memory NULL is returned. */
 raxNode *raxReallocForData(raxNode *n, void *data) {
     if (data == NULL) return n; /* No reallocation needed, setting isnull=1 */
     size_t curlen = raxNodeCurrentLength(n);
-    return realloc(n,curlen+sizeof(void*));
+    return rax_realloc(n,curlen+sizeof(void*));
 }
 
 /* Set the node auxiliary data to the specified pointer. */
@@ -219,9 +220,9 @@ raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr, raxNode ***parentli
     /* Make space in the original node. */
     if (n->iskey) curlen += sizeof(void*);
     newlen = curlen+sizeof(raxNode*)+1; /* Add 1 char and 1 pointer. */
-    raxNode *newn = realloc(n,newlen);
+    raxNode *newn = rax_realloc(n,newlen);
     if (newn == NULL) {
-        free(child);
+        rax_free(child);
         return NULL;
     }
     n = newn;
@@ -317,9 +318,9 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
         data = raxGetData(n); /* To restore it later. */
         if (!n->isnull) newsize += sizeof(void*);
     }
-    raxNode *newn = realloc(n,newsize);
+    raxNode *newn = rax_realloc(n,newsize);
     if (newn == NULL) {
-        free(*child);
+        rax_free(*child);
         return NULL;
     }
     n = newn;
@@ -588,13 +589,13 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         if (trimmedlen) {
             nodesize = sizeof(raxNode)+trimmedlen+sizeof(raxNode*);
             if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-            trimmed = malloc(nodesize);
+            trimmed = rax_malloc(nodesize);
         }
 
         if (postfixlen) {
             nodesize = sizeof(raxNode)+postfixlen+
                        sizeof(raxNode*);
-            postfix = malloc(nodesize);
+            postfix = rax_malloc(nodesize);
         }
 
         /* OOM? Abort now that the tree is untouched. */
@@ -602,9 +603,9 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             (trimmedlen && trimmed == NULL) ||
             (postfixlen && postfix == NULL))
         {
-            free(splitnode);
-            free(trimmed);
-            free(postfix);
+            rax_free(splitnode);
+            rax_free(trimmed);
+            rax_free(postfix);
             errno = ENOMEM;
             return 0;
         }
@@ -659,7 +660,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         /* 6. Continue insertion: this will cause the splitnode to
          * get a new child (the non common character at the currently
          * inserted key). */
-        free(h);
+        rax_free(h);
         h = splitnode;
     } else if (h->iscompr && i == len) {
     /* ------------------------- ALGORITHM 2 --------------------------- */
@@ -670,15 +671,15 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         size_t postfixlen = h->size - j;
         size_t nodesize = sizeof(raxNode)+postfixlen+sizeof(raxNode*);
         if (data != NULL) nodesize += sizeof(void*);
-        raxNode *postfix = malloc(nodesize);
+        raxNode *postfix = rax_malloc(nodesize);
 
         nodesize = sizeof(raxNode)+j+sizeof(raxNode*);
         if (h->iskey && !h->isnull) nodesize += sizeof(void*);
-        raxNode *trimmed = malloc(nodesize);
+        raxNode *trimmed = rax_malloc(nodesize);
 
         if (postfix == NULL || trimmed == NULL) {
-            free(postfix);
-            free(trimmed);
+            rax_free(postfix);
+            rax_free(trimmed);
             errno = ENOMEM;
             return 0;
         }
@@ -859,11 +860,11 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     /* 4. Update size. */
     parent->size--;
 
-    /* Realloc the node according to the theoretical memory usage, to free
+    /* realloc the node according to the theoretical memory usage, to free
      * data if we are over-allocating right now. */
-    raxNode *newnode = realloc(parent,raxNodeCurrentLength(parent));
+    raxNode *newnode = rax_realloc(parent,raxNodeCurrentLength(parent));
     debugnode("raxRemoveChild after", newnode);
-    /* Note: if realloc() fails we just return the old address, which
+    /* Note: if rax_realloc() fails we just return the old address, which
      * is valid. */
     return newnode ? newnode : parent;
 }
@@ -901,7 +902,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
             child = h;
             debugf("Freeing child %p [%.*s] key:%d\n", (void*)child,
                 (int)child->size, (char*)child->data, child->iskey);
-            free(child);
+            rax_free(child);
             rax->numnodes--;
             h = raxStackPop(&ts);
              /* If this node has more then one child, or actually holds
@@ -1015,7 +1016,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
             /* If we can compress, create the new node and populate it. */
             size_t nodesize =
                 sizeof(raxNode)+comprsize+sizeof(raxNode*);
-            raxNode *new = malloc(nodesize);
+            raxNode *new = rax_malloc(nodesize);
             /* An out of memory here just means we cannot optimize this
              * node, but the tree is left in a consistent state. */
             if (new == NULL) {
@@ -1039,7 +1040,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
                 raxNode **cp = raxNodeLastChildPtr(h);
                 raxNode *tofree = h;
                 memcpy(&h,cp,sizeof(h));
-                free(tofree); rax->numnodes--;
+                rax_free(tofree); rax->numnodes--;
                 if (h->iskey || (!h->iscompr && h->size != 1)) break;
             }
             debugnode("New node",new);
@@ -1077,7 +1078,7 @@ void raxRecursiveFree(rax *rax, raxNode *n) {
         cp--;
     }
     debugnode("free depth-first",n);
-    free(n);
+    rax_free(n);
     rax->numnodes--;
 }
 
@@ -1085,7 +1086,7 @@ void raxRecursiveFree(rax *rax, raxNode *n) {
 void raxFree(rax *rax) {
     raxRecursiveFree(rax,rax->head);
     assert(rax->numnodes == 0);
-    free(rax);
+    rax_free(rax);
 }
 
 /* ------------------------------- Iterator --------------------------------- */
@@ -1111,7 +1112,7 @@ int raxIteratorAddChars(raxIterator *it, unsigned char *s, size_t len) {
         unsigned char *old = (it->key == it->key_static_string) ? NULL :
                                                                   it->key;
         size_t new_max = (it->key_len+len)*2;
-        it->key = realloc(old,new_max);
+        it->key = rax_realloc(old,new_max);
         if (it->key == NULL) {
             it->key = (!old) ? it->key_static_string : old;
             return 0;
@@ -1525,7 +1526,7 @@ int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
 
 /* Free the iterator. */
 void raxStop(raxIterator *it) {
-    if (it->key != it->key_static_string) free(it->key);
+    if (it->key != it->key_static_string) rax_free(it->key);
     raxStackFree(&it->stack);
 }
 
