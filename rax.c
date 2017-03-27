@@ -360,7 +360,7 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
     size_t j = 0; /* Position in the node children (or bytes if compressed).*/
     while(h->size && i < len) {
         debugnode("Lookup current node",h);
-        char *v = (char*)h->data;
+        unsigned char *v = h->data;
 
         if (h->iscompr) {
             for (j = 0; j < h->size && i < len; j++, i++) {
@@ -1783,9 +1783,10 @@ int main(void) {
     // raxSeek(&iter,NULL,0,"^");
     // raxSeek(&iter,"zorro",5,"<=");
     // raxSeek(&iter,"zorro",5,"<");
+    // raxSeek(&iter,NULL,0,"$");
 
     // STILL TO TEST
-    raxSeek(&iter,NULL,0,"$");
+    raxSeek(&iter,(unsigned char*)"ro",2,">=");
     printf("EOF: %d\n", (iter.flags & RAX_ITER_EOF) != 0);
 
     printf("SEEKED: %.*s, val %p\n", (int)iter.key_len,
