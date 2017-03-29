@@ -34,7 +34,12 @@
 #include <stdio.h>
 #include <errno.h>
 #include "rax.h"
-#include "rax_malloc.h"
+
+#ifndef RAX_MALLOC_INCLUDE
+#define RAX_MALLOC_INCLUDE "rax_malloc.h"
+#endif
+
+#include RAX_MALLOC_INCLUDE
 
 /* This is a special pointer that is guaranteed to never have the same value
  * of a radix tree node. It's used in order to report "not found" error without
