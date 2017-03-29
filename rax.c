@@ -330,7 +330,7 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
     memcpy(n->data,s,len);
     if (n->iskey) raxSetData(n,data);
     raxNode **childfield = raxNodeLastChildPtr(n);
-    memcpy(childfield,&child,sizeof(child));
+    memcpy(childfield,child,sizeof(*child));
     return n;
 }
 
