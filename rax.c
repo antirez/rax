@@ -84,6 +84,7 @@ static inline int raxStackPush(raxStack *ts, void *ptr) {
             if (ts->stack == NULL) {
                 ts->stack = ts->static_items;
                 ts->oom = 1;
+                errno = ENOMEM;
                 return 0;
             }
             memcpy(ts->stack,ts->static_items,sizeof(void*)*ts->maxitems);
@@ -91,6 +92,7 @@ static inline int raxStackPush(raxStack *ts, void *ptr) {
             void **newalloc = rax_realloc(ts->stack,sizeof(void*)*ts->maxitems*2);
             if (newalloc == NULL) {
                 ts->oom = 1;
+                errno = ENOMEM;
                 return 0;
             }
             ts->stack = newalloc;
@@ -729,7 +731,6 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
      * since i == len. */
     while(i < len) {
         raxNode *child;
-        rax->numnodes++;
 
         /* If this node is going to have a single child, and there
          * are other characters, so that that would result in a chain
@@ -755,6 +756,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
             parentlink = new_parentlink;
             i++;
         }
+        rax->numnodes++;
         h = child;
     }
     raxNode *newh = raxReallocForData(h,data);
@@ -770,7 +772,8 @@ oom:
      * already added. Set the node as a key, and then remove it. */
     h->isnull = 1;
     h->iskey = 1;
-    raxRemove(rax,s,i);
+    rax->numele++; /* Compensate the next remove. */
+    assert(raxRemove(rax,s,i) != 0);
     errno = ENOMEM;
     return 0;
 }
@@ -1115,6 +1118,7 @@ int raxIteratorAddChars(raxIterator *it, unsigned char *s, size_t len) {
         it->key = rax_realloc(old,new_max);
         if (it->key == NULL) {
             it->key = (!old) ? it->key_static_string : old;
+            errno = ENOMEM;
             return 0;
         }
         if (old == NULL) memcpy(it->key,it->key_static_string,it->key_len);
@@ -1334,7 +1338,8 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
 
 /* Seek an iterator at the specified element.
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
- * 1 is returned. */
+ * 1 is returned. When 0 is returned for out of memory, errno is set to
+ * the ENOMEM value. */
 int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
@@ -1358,6 +1363,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     } else if (op[0] == '$') {
         last = 1;
     } else {
+        errno = 0;
         return 0; /* Error. */
     }
 
