@@ -774,11 +774,16 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
 
 oom:
     /* This code path handles out of memory after part of the sub-tree was
-     * already added. Set the node as a key, and then remove it. */
-    h->isnull = 1;
-    h->iskey = 1;
-    rax->numele++; /* Compensate the next remove. */
-    assert(raxRemove(rax,s,i) != 0);
+     * already modified. Set the node as a key, and then remove it. However we
+     * do that only if the node is a terminal node, otherwise if the OOM
+     * happened reallocating a node in the middle, we don't need to free
+     * anything. */
+    if (h->size == 0) {
+        h->isnull = 1;
+        h->iskey = 1;
+        rax->numele++; /* Compensate the next remove. */
+        assert(raxRemove(rax,s,i) != 0);
+    }
     errno = ENOMEM;
     return 0;
 }
@@ -871,7 +876,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     /* realloc the node according to the theoretical memory usage, to free
      * data if we are over-allocating right now. */
     raxNode *newnode = rax_realloc(parent,raxNodeCurrentLength(parent));
-    debugnode("raxRemoveChild after", newnode);
+    if (newnode) debugnode("raxRemoveChild after", newnode);
     /* Note: if rax_realloc() fails we just return the old address, which
      * is valid. */
     return newnode ? newnode : parent;
