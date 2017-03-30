@@ -876,7 +876,9 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     /* realloc the node according to the theoretical memory usage, to free
      * data if we are over-allocating right now. */
     raxNode *newnode = rax_realloc(parent,raxNodeCurrentLength(parent));
-    if (newnode) debugnode("raxRemoveChild after", newnode);
+    if (newnode) {
+        debugnode("raxRemoveChild after", newnode);
+    }
     /* Note: if rax_realloc() fails we just return the old address, which
      * is valid. */
     return newnode ? newnode : parent;
