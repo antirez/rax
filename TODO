@@ -1,62 +1,24 @@
 ASAP
 ===
 
-* Allow to switch allocator easily just modifying a rax_alloc.h file.
 * Change the API so that there is always the ability to return the old value
   both when adding (updating) and removing elements.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
-* Handle OOM everywhere. Consider a define to switch checking off if it has
-  a measurable performance cost.
-* All the low level node management functions should be called radtreeNode...()
 * Write a complete unit test, testing with gcov that coverage is 100%.
 * Write a fuzzer.
 * Check if reclaiming nodes from first to last child is a performance
   improvement in radtreeFree().
-* Add an interator: radtreeSeek() to start the iteration at a given element
-  (should support and start and stop point, inclusive and exclsive both sides,
-   and should be able to see at the start or end of the range. Moreover there
-   should be ways to specify first and last elements of the three).
-   Iteration should work using radtreeNext() and radtreePrev() to navigate
-   the tree, returing the keys and associated values.
-
-   Example:
-
-   raxIterator iter;
-   raxStart(&iter,radixtree);
-   raxSeek(&iter,"abc",3,">=");
-   raxSeek(&iter,"",0,"^");
-   raxSeek(&iter,"",0,"$");
-
-   raxIteratorSetSafe(&iter);
-   raxIteratorSetUnsafe(&iter);
-
-   while(raxNext(iterator,"ro",2,"<=")) {
-       printf("key: %.*s, val %p\n", (int)iter->keylen,
-                                     (char*)iter->key,
-                                     iter->data);
-   }
-   raxStop(iterator);
-
+* Implement safe iterator by automatic re-seeking.
 * Random element function: perform log(N) random steps followed by rand(log(N)) steps.
 * Move test/benchmark to separated C files.
-* raxNext() / raxPrev() should auto-seek the iterator if not seeked.
 * Consider using void* where unsigned char* is expected for keys, so that
   it is possible to use char* or unsigned char* in the API without issues.
-* Prevent the iterator to get invalid when EOF is reached with raxNext():
-  to do so in a smart way we could just save the current key len when
-  entering the function and simply re-set it and reseek at EOF, since the
-  key buffer should be unmodified.
-* Make sure that the raxPrev() call when returning EOF does not have the
-  same problem of making raxNext() impossible.
-* Set errno to ENOENT / ENOMEM in raxNext()/raxPrev().
 * Test with NULL values
-
-ITERATOR
-===
-
-* Implement "$"
+* Test with empty strings.
+* Finish README
+* Turn repository into public.
 
 FUTURE
 ===
