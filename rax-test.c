@@ -410,6 +410,11 @@ int iteratorFuzzTest(int keymode, size_t count) {
             memcmp(iter.key,array_key,iter.key_len))
         {
             printf("Iter fuzz: returned element %d mismatch\n", iteration);
+            if (keymode != KEY_RANDOM) {
+                printf("%.*s (iter) VS %.*s (array)\n",
+                    (int)iter.key_len, (char*)iter.key,
+                    (int)array_key_len, (char*)array_key);
+            }
             return 1;
         }
         iteration++;
