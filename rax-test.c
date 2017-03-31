@@ -328,14 +328,16 @@ int iteratorFuzzTest(int keymode, size_t count) {
 
     /* Fill a radix tree and a linear array with some data. */
     unsigned char key[64];
+    size_t j = 0;
     for (size_t i = 0; i < count; i++) {
         uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
         void *val = (void*)(unsigned long)htHash(key,keylen);
 
         if (raxInsert(rax,key,keylen,val)) {
-            array[i].key = malloc(keylen);
-            array[i].key_len = keylen;
-            memcpy(array[i].key,key,keylen);
+            array[j].key = malloc(keylen);
+            array[j].key_len = keylen;
+            memcpy(array[j].key,key,keylen);
+            j++;
         }
     }
     count = rax->numele;
@@ -366,10 +368,12 @@ int iteratorFuzzTest(int keymode, size_t count) {
 
         array_res = (seekidx == -1) ? 0 : 1;
         if (array_res) {
-            array_key = array[seekidx].key;
-            array_key_len = array[seekidx].key_len;
             if (next && seekidx == (signed)count) array_res = 0;
             if (!next && seekidx == -1) array_res = 0;
+            if (array_res != 0) {
+                array_key = array[seekidx].key;
+                array_key_len = array[seekidx].key_len;
+            }
         }
 
         if (next) {
@@ -407,6 +411,8 @@ int iteratorFuzzTest(int keymode, size_t count) {
 }
 
 int main(int argc, char **argv) {
+    srand(1234);
+
     /* Tests to run by default are set here. */
     int do_benchmark = 0;
     int do_units = 1;
