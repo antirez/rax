@@ -320,6 +320,7 @@ int arraySeek(arrayItem *array, int count, unsigned char *key, size_t len, char 
             break;
         }
     }
+    if (lt && i == count) return count-1;
     if (i < 0 || i >= count) return -1;
     return i;
 }
