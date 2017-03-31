@@ -267,6 +267,145 @@ int fuzzTest(int keymode) {
     return 0;
 }
 
+/* Iterator fuzz testing. Compared the items returned by the Rax iterator with
+ * a C implementation obtained by sorting the inserted strings in a linear
+ * array. */
+typedef struct arrayItem {
+    unsigned char *key;
+    size_t key_len;
+} arrayItem;
+
+/* Utility functions used with qsort() in order to sort the array of strings
+ * in the same way Rax sorts keys (which is, lexicographically considering
+ * every byte an unsigned integer. */
+int compareAB(const unsigned char *keya, size_t lena, const unsigned char *keyb, size_t lenb) {
+    size_t minlen = (lena <= lenb) ? lena : lenb;
+    int retval = memcmp(keya,keyb,minlen);
+    if (lena == lenb || retval != 0) return retval;
+    return (lena > lenb) ? 1 : -1;
+}
+
+int compareArrayItems(const void *aptr, const void *bptr) {
+    const arrayItem *a = aptr;
+    const arrayItem *b = bptr;
+    return compareAB(a->key,a->key_len,b->key,b->key_len);
+}
+
+/* Seek an element in the array, returning the seek index (the index inside the
+ * array). If the seek is not possible (== operator and key not found or empty
+ * array) -1 is returned. */
+int arraySeek(arrayItem *array, int count, unsigned char *key, size_t len, char *op) {
+    if (count == 0) return -1;
+    if (op[0] == '^') return 0;
+    if (op[0] == '$') return count-1;
+
+    int eq = 0, lt = 0, gt = 0;
+    if (op[1] == '=') eq = 1;
+    if (op[0] == '<') lt = 1;
+    if (op[0] == '>') gt = 1;
+
+    int i;
+    for (i = 0; i < count; i++) {
+        int cmp = compareAB(array[i].key,array[i].key_len,key,len);
+        if (eq && !cmp) return i;
+        if (cmp > 0 && gt) return i;
+        if (cmp >= 0 && lt) {
+            i--;
+            break;
+        }
+    }
+    if (i < 0 || i >= count) return -1;
+    return i;
+}
+
+int iteratorFuzzTest(int keymode, size_t count) {
+    count = rand()%count;
+    rax *rax = raxNew();
+    arrayItem *array = malloc(sizeof(arrayItem)*count);
+
+    printf("Iterator Fuzz test in mode %d: ", keymode);
+    fflush(stdout);
+
+    /* Fill a radix tree and a linear array with some data. */
+    unsigned char key[64];
+    for (size_t i = 0; i < count; i++) {
+        uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
+        void *val = (void*)(unsigned long)htHash(key,keylen);
+
+        if (raxInsert(rax,key,keylen,val)) {
+            array[i].key = malloc(keylen);
+            array[i].key_len = keylen;
+            memcpy(array[i].key,key,keylen);
+        }
+    }
+    count = rax->numele;
+
+    /* Sort the array. */
+    qsort(array,count,sizeof(arrayItem),compareArrayItems);
+
+    /* Perform a random seek operation. */
+    uint32_t keylen = int2key((char*)key,sizeof(key),
+        rand()%(count ? count : 1),keymode);
+    raxIterator iter;
+    raxStart(&iter,rax);
+    char *seekops[] = {"==",">=","<=",">","<","^","$"};
+    char *seekop = seekops[rand() % 7];
+    raxSeek(&iter,key,keylen,seekop);
+    int seekidx = arraySeek(array,count,key,keylen,seekop);
+
+    printf("%lu elements inserted, using %s\n", (unsigned long)rax->numele,
+                                                seekop);
+
+    int next = rand() % 2;
+    int iteration = 0;
+    while(1) {
+        int rax_res;
+        int array_res;
+        unsigned char *array_key = NULL;
+        size_t array_key_len = 0;
+
+        array_res = (seekidx == -1) ? 0 : 1;
+        if (array_res) {
+            array_key = array[seekidx].key;
+            array_key_len = array[seekidx].key_len;
+            if (next && seekidx == (signed)count) array_res = 0;
+            if (!next && seekidx == -1) array_res = 0;
+        }
+
+        if (next) {
+            rax_res = raxNext(&iter,NULL,0,NULL);
+            if (array_res) seekidx++;
+        } else {
+            rax_res = raxPrev(&iter,NULL,0,NULL);
+            if (array_res) seekidx--;
+        }
+
+        /* Both the iteratos should agree about EOF. */
+        if (array_res != rax_res) {
+            printf("Iter fuzz: iterators do not agree about EOF "
+                   "at iteration %d:  "
+                   "array_more=%d rax_more=%d\n", iteration, array_res, rax_res);
+            return 1;
+        }
+        if (array_res == 0) break; /* End of iteration reached. */
+
+#if 0
+        printf("%.*s vs %.*s\n", (int)iter.key_len,(char*)iter.key,
+                                 (int)array_key_len,(char*)array_key);
+#endif
+
+        /* Check that the returned keys are the same. */
+        if (iter.key_len != array_key_len ||
+            memcmp(iter.key,array_key,iter.key_len))
+        {
+            printf("Iter fuzz: returned element %d mismatch\n", iteration);
+            return 1;
+        }
+        iteration++;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     /* Tests to run by default are set here. */
     int do_benchmark = 0;
@@ -296,9 +435,19 @@ int main(int argc, char **argv) {
 
     int errors = 0;
     if (do_fuzz) {
+        for (int i = 0; i < 1000; i++) {
+            if (iteratorFuzzTest(KEY_INT,100)) errors++;
+            if (iteratorFuzzTest(KEY_UNIQUE_ALPHA,100)) errors++;
+            if (iteratorFuzzTest(KEY_RANDOM,100)) errors++;
+        }
         if (fuzzTest(KEY_INT)) errors++;
         if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
         if (fuzzTest(KEY_RANDOM)) errors++;
+    }
+    if (errors) {
+        printf("!!! WARNING !!!: %d errors found\n", errors);
+    } else {
+        printf("OK! \\o/\n");
     }
     return errors;
 }
