@@ -1416,7 +1416,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
         /* We found our node, since the key matches and we have an
          * "equal" condition. */
         if (!raxIteratorAddChars(it,ele,len)) return 0; /* OOM. */
-    } else {
+    } else if (lt || gt) {
         /* Exact key not found or eq flag not set. We have to set as current
          * key the one represented by the node we stopped at, and perform
          * a next/prev operation to seek. To reconstruct the key at this node
@@ -1508,6 +1508,10 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
             if (lt && !raxIteratorPrevStep(it,0)) return 0;
             it->flags |= RAX_ITER_JUST_SEEKED; /* Ignore next call. */
         }
+    } else {
+        /* If we are here just eq was set but no match was found. */
+        it->flags |= RAX_ITER_EOF;
+        return 1;
     }
     return 1;
 }
