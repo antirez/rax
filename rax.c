@@ -212,7 +212,7 @@ void *raxGetData(raxNode *n) {
  * On success the new parent node pointer is returned (it may change because
  * of the realloc, so the caller should discard 'n' and use the new value).
  * On out of memory NULL is returned, and the old node is still valid. */
-raxNode *raxAddChild(raxNode *n, char c, raxNode **childptr, raxNode ***parentlink) {
+raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode ***parentlink) {
     assert(n->iscompr == 0);
 
     size_t curlen = sizeof(raxNode)+
