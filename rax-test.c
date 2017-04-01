@@ -330,9 +330,6 @@ int iteratorFuzzTest(int keymode, size_t count) {
     rax *rax = raxNew();
     arrayItem *array = malloc(sizeof(arrayItem)*count);
 
-    printf("Iterator Fuzz test in mode %d: ", keymode);
-    fflush(stdout);
-
     /* Fill a radix tree and a linear array with some data. */
     unsigned char key[64];
     size_t j = 0;
@@ -361,9 +358,6 @@ int iteratorFuzzTest(int keymode, size_t count) {
     char *seekop = seekops[rand() % 7];
     raxSeek(&iter,key,keylen,seekop);
     int seekidx = arraySeek(array,count,key,keylen,seekop);
-
-    printf("%lu elements inserted, using %s\n", (unsigned long)rax->numele,
-                                                seekop);
 
     int next = rand() % 2;
     int iteration = 0;
@@ -427,7 +421,6 @@ int regtest1(void) {
     raxInsert(rax,(unsigned char*)"B",1,(void*)(long)3);
     raxInsert(rax,(unsigned char*)"FY",2,(void*)(long)4);
     raxInsert(rax,(unsigned char*)"WI",2,(void*)(long)5);
-    raxShow(rax);
 
     raxIterator iter;
     raxStart(&iter,rax);
@@ -480,19 +473,27 @@ int main(int argc, char **argv) {
     int errors = 0;
 
     if (do_regression) {
+        printf("Performing regression tests: "); fflush(stdout);
         if (regtest1()) errors++;
+        if (errors == 0) printf("OK\n");
     }
 
     if (do_fuzz) {
+        if (fuzzTest(KEY_INT)) errors++;
+        if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
+        if (fuzzTest(KEY_RANDOM_ALPHA)) errors++;
+        printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
             if (iteratorFuzzTest(KEY_UNIQUE_ALPHA,100)) errors++;
             if (iteratorFuzzTest(KEY_RANDOM_ALPHA,1000)) errors++;
             if (iteratorFuzzTest(KEY_RANDOM,1000)) errors++;
+            if (!(i % 50)) {
+                printf(".");
+                fflush(stdout);
+            }
         }
-        if (fuzzTest(KEY_INT)) errors++;
-        if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
-        if (fuzzTest(KEY_RANDOM_ALPHA)) errors++;
+        printf("\n");
     }
 
     if (errors) {
