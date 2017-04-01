@@ -410,6 +410,31 @@ int iteratorFuzzTest(int keymode, size_t count) {
     return 0;
 }
 
+/* Regression test #1: Iterator wrong element returned after seek. */
+int regtest1(void) {
+    rax *rax = raxNew();
+    raxInsert(rax,(unsigned char*)"LKE",3,(void*)(long)1);
+    raxInsert(rax,(unsigned char*)"TQ",2,(void*)(long)2);
+    raxInsert(rax,(unsigned char*)"B",1,(void*)(long)3);
+    raxInsert(rax,(unsigned char*)"FY",2,(void*)(long)4);
+    raxInsert(rax,(unsigned char*)"WI",2,(void*)(long)5);
+    raxShow(rax);
+
+    raxIterator iter;
+    raxStart(&iter,rax);
+    raxSeek(&iter,(unsigned char*)"FMP",3,">");
+    if (raxNext(&iter,NULL,0,NULL)) {
+        if (iter.key_len != 2 ||
+            memcmp(iter.key,"FY",2))
+        {
+            printf("Regression test 1 failed: 'FY' expected, got: '%.*s'\n",
+                (int)iter.key_len, (char*)iter.key);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     srand(1234);
 
@@ -417,12 +442,14 @@ int main(int argc, char **argv) {
     int do_benchmark = 0;
     int do_units = 1;
     int do_fuzz = 1;
+    int do_regression = 1;
 
     /* If the user passed arguments, override the tests to run. */
     if (argc > 1) {
         do_benchmark = 0;
         do_units = 0;
         do_fuzz = 0;
+        do_regression = 0;
 
         for (int i = 1; i < argc; i++) {
             if (!strcmp(argv[i],"--bench")) {
@@ -431,15 +458,22 @@ int main(int argc, char **argv) {
                 do_fuzz = 1;
             } else if (!strcmp(argv[i],"--units")) {
                 do_units = 1;
+            } else if (!strcmp(argv[i],"--regression")) {
+                do_regression = 1;
             } else {
-                fprintf(stderr, "Usage: %s [--bench] [--fuzz] [--units]\n",
-                    argv[0]);
+                fprintf(stderr, "Usage: %s [--bench] [--fuzz] [--units] "
+                                "[--regression]\n", argv[0]);
                 exit(1);
             }
         }
     }
 
     int errors = 0;
+
+    if (do_regression) {
+        if (regtest1()) errors++;
+    }
+
     if (do_fuzz) {
         for (int i = 0; i < 1000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
@@ -450,6 +484,7 @@ int main(int argc, char **argv) {
         if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
         if (fuzzTest(KEY_RANDOM)) errors++;
     }
+
     if (errors) {
         printf("!!! WARNING !!!: %d errors found\n", errors);
     } else {
