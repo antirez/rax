@@ -57,7 +57,7 @@ typedef struct ht {
 
 /* Create a new hash table. */
 hashtable *htNew(void) {
-    hashtable *ht = malloc(sizeof(*ht));
+    hashtable *ht = calloc(1,sizeof(*ht));
     ht->numele = 0;
     return ht;
 }
