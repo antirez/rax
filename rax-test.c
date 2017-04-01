@@ -395,7 +395,8 @@ int iteratorFuzzTest(int keymode, size_t count) {
         if (array_res != rax_res) {
             printf("Iter fuzz: iterators do not agree about EOF "
                    "at iteration %d:  "
-                   "array_more=%d rax_more=%d\n", iteration, array_res, rax_res);
+                   "array_more=%d rax_more=%d next=%d\n",
+                   iteration, array_res, rax_res, next);
             return 1;
         }
         if (array_res == 0) break; /* End of iteration reached. */
@@ -411,9 +412,10 @@ int iteratorFuzzTest(int keymode, size_t count) {
         {
             printf("Iter fuzz: returned element %d mismatch\n", iteration);
             if (keymode != KEY_RANDOM) {
-                printf("%.*s (iter) VS %.*s (array)\n",
+                printf("%.*s (iter) VS %.*s (array) next=%d\n",
                     (int)iter.key_len, (char*)iter.key,
-                    (int)array_key_len, (char*)array_key);
+                    (int)array_key_len, (char*)array_key,
+                    next);
             }
             return 1;
         }
