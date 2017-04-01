@@ -1206,6 +1206,8 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
              * children representing keys lexicographically greater than the
              * current key. */
             while(1) {
+                int old_noup = noup;
+
                 /* Already on head? Can't go up, iteration finished. */
                 if (!noup && it->node == it->rt->head) {
                     it->flags |= RAX_ITER_EOF;
@@ -1229,7 +1231,7 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
 
                 /* Try visiting the next child if there was at least one
                  * additional child. */
-                if (!it->node->iscompr && it->node->size >= 1) {
+                if (!it->node->iscompr && it->node->size > (old_noup ? 0 : 1)) {
                     raxNode **cp = raxNodeFirstChildPtr(it->node);
                     int i = 0;
                     while (i < it->node->size) {
@@ -1292,6 +1294,8 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     raxNode *orig_node = it->node;
 
     while(1) {
+        int old_noup = noup;
+
         /* Already on head? Can't go up, iteration finished. */
         if (!noup && it->node == it->rt->head) {
             it->flags |= RAX_ITER_EOF;
@@ -1315,7 +1319,7 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
 
         /* Try visiting the prev child if there is at least one
          * child. */
-        if (!it->node->iscompr && it->node->size >= 1) {
+        if (!it->node->iscompr && it->node->size > (old_noup ? 0 : 1)) {
             raxNode **cp = raxNodeLastChildPtr(it->node);
             int i = it->node->size-1;
             while (i >= 0) {
