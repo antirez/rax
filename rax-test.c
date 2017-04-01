@@ -401,11 +401,6 @@ int iteratorFuzzTest(int keymode, size_t count) {
         }
         if (array_res == 0) break; /* End of iteration reached. */
 
-#if 0
-        printf("%.*s vs %.*s\n", (int)iter.key_len,(char*)iter.key,
-                                 (int)array_key_len,(char*)array_key);
-#endif
-
         /* Check that the returned keys are the same. */
         if (iter.key_len != array_key_len ||
             memcmp(iter.key,array_key,iter.key_len))
