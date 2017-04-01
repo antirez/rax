@@ -1227,9 +1227,9 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
                 int todel = it->node->iscompr ? it->node->size : 1;
                 raxIteratorDelChars(it,todel);
 
-                /* Try visiting the next child if there is at least one
-                 * child. */
-                if (!it->node->iscompr && it->node->size > 1) {
+                /* Try visiting the next child if there was at least one
+                 * additional child. */
+                if (!it->node->iscompr && it->node->size >= 1) {
                     raxNode **cp = raxNodeFirstChildPtr(it->node);
                     int i = 0;
                     while (i < it->node->size) {
@@ -1313,9 +1313,9 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
         int todel = it->node->iscompr ? it->node->size : 1;
         raxIteratorDelChars(it,todel);
 
-        /* Try visiting the prev child if there was at least one
-         * additional child. */
-        if (!it->node->iscompr && it->node->size > 1) {
+        /* Try visiting the prev child if there is at least one
+         * child. */
+        if (!it->node->iscompr && it->node->size >= 1) {
             raxNode **cp = raxNodeLastChildPtr(it->node);
             int i = it->node->size-1;
             while (i >= 0) {

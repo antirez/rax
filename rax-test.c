@@ -186,10 +186,12 @@ long long ustime(void) {
  * KEY_UNIQUE_ALPHA: Turn it into a random-looking alphanumerical string
  *                   according to the int2alphakey() function, so that
  *                   at every integer is mapped a different string.
- * KEY_RANDOM: Totally random string up to maxlen bytes. */
+ * KEY_RANDOM: Totally random string up to maxlen bytes.
+ * KEY_RANDOM_ALPHA: Alphanumerical random string up to maxlen bytes. */
 #define KEY_INT 0
 #define KEY_UNIQUE_ALPHA 1
 #define KEY_RANDOM 2
+#define KEY_RANDOM_ALPHA 3
 static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
     if (mode == KEY_INT) {
         return snprintf(s,maxlen,"%lu",(unsigned long)i);
@@ -199,6 +201,10 @@ static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
     } else if (mode == KEY_RANDOM) {
         int r = rand() % maxlen;
         for (int i = 0; i < r; i++) s[i] = rand()&0xff;
+        return r;
+    } else if (mode == KEY_RANDOM_ALPHA) {
+        int r = rand() % maxlen;
+        for (int i = 0; i < r; i++) s[i] = 'A'+rand()%('z'-'A'+1);
         return r;
     } else {
         return 0;
@@ -314,6 +320,7 @@ int arraySeek(arrayItem *array, int count, unsigned char *key, size_t len, char 
             break;
         }
     }
+    if (lt && i == count) return count-1;
     if (i < 0 || i >= count) return -1;
     return i;
 }
@@ -388,7 +395,8 @@ int iteratorFuzzTest(int keymode, size_t count) {
         if (array_res != rax_res) {
             printf("Iter fuzz: iterators do not agree about EOF "
                    "at iteration %d:  "
-                   "array_more=%d rax_more=%d\n", iteration, array_res, rax_res);
+                   "array_more=%d rax_more=%d next=%d\n",
+                   iteration, array_res, rax_res, next);
             return 1;
         }
         if (array_res == 0) break; /* End of iteration reached. */
@@ -403,6 +411,12 @@ int iteratorFuzzTest(int keymode, size_t count) {
             memcmp(iter.key,array_key,iter.key_len))
         {
             printf("Iter fuzz: returned element %d mismatch\n", iteration);
+            if (keymode != KEY_RANDOM) {
+                printf("%.*s (iter) VS %.*s (array) next=%d\n",
+                    (int)iter.key_len, (char*)iter.key,
+                    (int)array_key_len, (char*)array_key,
+                    next);
+            }
             return 1;
         }
         iteration++;
@@ -482,7 +496,7 @@ int main(int argc, char **argv) {
         }
         if (fuzzTest(KEY_INT)) errors++;
         if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
-        if (fuzzTest(KEY_RANDOM)) errors++;
+        if (fuzzTest(KEY_RANDOM_ALPHA)) errors++;
     }
 
     if (errors) {
