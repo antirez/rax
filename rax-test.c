@@ -489,10 +489,11 @@ int main(int argc, char **argv) {
     }
 
     if (do_fuzz) {
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
             if (iteratorFuzzTest(KEY_UNIQUE_ALPHA,100)) errors++;
-            if (iteratorFuzzTest(KEY_RANDOM,100)) errors++;
+            if (iteratorFuzzTest(KEY_RANDOM_ALPHA,1000)) errors++;
+            if (iteratorFuzzTest(KEY_RANDOM,1000)) errors++;
         }
         if (fuzzTest(KEY_INT)) errors++;
         if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
