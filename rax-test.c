@@ -270,6 +270,8 @@ int fuzzTest(int keymode) {
         return 1;
     }
 
+    raxStop(&iter);
+    raxFree(rax);
     return 0;
 }
 
@@ -410,6 +412,9 @@ int iteratorFuzzTest(int keymode, size_t count) {
         }
         iteration++;
     }
+
+    raxStop(&iter);
+    raxFree(rax);
     return 0;
 }
 
@@ -434,6 +439,9 @@ int regtest1(void) {
             return 1;
         }
     }
+
+    raxStop(&iter);
+    raxFree(rax);
     return 0;
 }
 
