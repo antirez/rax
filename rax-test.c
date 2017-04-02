@@ -129,6 +129,20 @@ void *htFind(hashtable *t, unsigned char *s, size_t len) {
     return n->data;
 }
 
+/* Free the whole hash table including all the linked nodes. */
+void htFree(hashtable *ht) {
+    for (int j = 0; j < HT_TABLE_SIZE; j++) {
+        htNode *next = ht->table[j];
+        while(next) {
+            htNode *this = next;
+            next = this->next;
+            free(this->key);
+            free(this);
+        }
+    }
+    free(ht);
+}
+
 /* --------------------------------------------------------------------------
  * Utility functions to generate keys, check time usage and so forth.
  * -------------------------------------------------------------------------*/
@@ -214,7 +228,7 @@ static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
 /* -------------------------------------------------------------------------- */
 
 /* Perform a fuzz test, returns 0 on success, 1 on error. */
-int fuzzTest(int keymode) {
+int fuzzTest(int keymode, size_t count) {
     hashtable *ht = htNew();
     rax *rax = raxNew();
 
@@ -222,7 +236,7 @@ int fuzzTest(int keymode) {
     fflush(stdout);
 
     /* Perform random operations on both the dictionaries. */
-    for (int i = 0; i < 1000000; i++) {
+    for (size_t i = 0; i < count; i++) {
         unsigned char key[64];
         uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
         void *val = (void*)(unsigned long)htHash(key,keylen);
@@ -272,6 +286,7 @@ int fuzzTest(int keymode) {
 
     raxStop(&iter);
     raxFree(rax);
+    htFree(ht);
     return 0;
 }
 
@@ -487,9 +502,9 @@ int main(int argc, char **argv) {
     }
 
     if (do_fuzz) {
-        if (fuzzTest(KEY_INT)) errors++;
-        if (fuzzTest(KEY_UNIQUE_ALPHA)) errors++;
-        if (fuzzTest(KEY_RANDOM_ALPHA)) errors++;
+        if (fuzzTest(KEY_INT,1000000)) errors++;
+        if (fuzzTest(KEY_UNIQUE_ALPHA,1000000)) errors++;
+        if (fuzzTest(KEY_RANDOM_ALPHA,1000000)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
