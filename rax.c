@@ -727,6 +727,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
         /* Finish! We don't need to contine with the insertion
          * algorithm for ALGO 2. The key is already inserted. */
         rax->numele++;
+        rax_free(h);
         return 1; /* Key inserted. */
     }
 
