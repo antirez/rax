@@ -894,7 +894,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
     debugf("### Delete: %.*s\n", (int)len, s);
     raxStackInit(&ts);
     int splitpos = 0;
-    size_t i = raxLowWalk(rax,s,len,&h,NULL,NULL,&ts);
+    size_t i = raxLowWalk(rax,s,len,&h,NULL,&splitpos,&ts);
     if (i != len || (h->iscompr && splitpos != 0) || !h->iskey) {
         raxStackFree(&ts);
         return 0;
