@@ -428,6 +428,8 @@ int iteratorFuzzTest(int keymode, size_t count) {
         iteration++;
     }
 
+    for (unsigned int i = 0; i < count; i++) free(array[i].key);
+    free(array);
     raxStop(&iter);
     raxFree(rax);
     return 0;
