@@ -844,7 +844,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
      *
      * 1. To start we seek the first element in both the children
      *    pointers and edge bytes in the node. */
-    raxNode **cp = raxNodeLastChildPtr(parent) - (parent->size-1);
+    raxNode **cp = raxNodeFirstChildPtr(parent);
     raxNode **c = cp;
     unsigned char *e = parent->data;
 
@@ -869,7 +869,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     memmove(((char*)cp)-1,cp,(parent->size-taillen-1)*sizeof(raxNode**));
 
     /* Move the remaining "tail" pointer at the right position as well. */
-    memmove(((char*)c)-1,c+1,taillen*sizeof(raxNode**));
+    memmove(((char*)c)-1,c+1,taillen*sizeof(raxNode**)+parent->iskey*sizeof(void*));
 
     /* 4. Update size. */
     parent->size--;
