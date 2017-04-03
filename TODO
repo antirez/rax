@@ -6,24 +6,21 @@ ASAP
 * Test the insertion of strings greater then 512 MB. Add unit test for empty
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
-* Write a complete unit test, testing with gcov that coverage is 100%.
-* Improve the fuzzer so that it also deletes from the tree randomly.
+* Test with gcov that coverage is 100% as expected.
 * Check if reclaiming nodes from first to last child is a performance
   improvement in radtreeFree().
-* Implement safe iterator by automatic re-seeking. Write tests for it.
-* Random element function: perform log(N) random steps followed by rand(log(N)) steps. Extraction will be biased but may be enough for many uses.
-* Move test/benchmark to separated C files.
-* Consider using void* where unsigned char* is expected for keys, so that
-  it is possible to use char* or unsigned char* in the API without issues.
-* Test with NULL values
-* Test with empty strings.
+* Random element function: perform log(N) random steps followed by rand(log(N)) steps. Extraction will be biased but may be enough for many uses. Test the quality of the generated elements against a few average credible data sets, like Object:<id> or alike.
+* Move the residual tests inside rax.c into rax-test.c.
+* Explicit unit test with NULL values
+* Explocit unit test with empty string
 * Finish README
 * Turn repository into public.
 
-FUTURE
+Potential features to add in the future
 ===
 
 * Ability to store aux data of any size inside the node itself, instead of the
   pointer. Could be done setting a special first byte in the value section
   to represent an encoded and progressive data length. This could further
   reduce the memory needs of a radix tree to represent a string->string map.
+* Rank operations. Only if opt-in during the Rax creation, otherwise no memory cost should be payed.
