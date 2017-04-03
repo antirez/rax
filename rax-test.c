@@ -202,11 +202,13 @@ long long ustime(void) {
  *                   according to the int2alphakey() function, so that
  *                   at every integer is mapped a different string.
  * KEY_RANDOM: Totally random string up to maxlen bytes.
- * KEY_RANDOM_ALPHA: Alphanumerical random string up to maxlen bytes. */
+ * KEY_RANDOM_ALPHA: Alphanumerical random string up to maxlen bytes.
+ * KEY_RANDOM_SMALL_CSET: Small charset random strings. */
 #define KEY_INT 0
 #define KEY_UNIQUE_ALPHA 1
 #define KEY_RANDOM 2
 #define KEY_RANDOM_ALPHA 3
+#define KEY_RANDOM_SMALL_CSET 4
 static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
     if (mode == KEY_INT) {
         return snprintf(s,maxlen,"%lu",(unsigned long)i);
@@ -220,6 +222,10 @@ static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
     } else if (mode == KEY_RANDOM_ALPHA) {
         int r = rand() % maxlen;
         for (int i = 0; i < r; i++) s[i] = 'A'+rand()%('z'-'A'+1);
+        return r;
+    } else if (mode == KEY_RANDOM_SMALL_CSET) {
+        int r = rand() % maxlen;
+        for (int i = 0; i < r; i++) s[i] = 'A'+rand()%4;
         return r;
     } else {
         return 0;
@@ -238,14 +244,13 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
 
     /* Perform random operations on both the dictionaries. */
     for (size_t i = 0; i < count; i++) {
-        unsigned char key[64];
+        unsigned char key[16];
         uint32_t keylen;
 
         /* Insert element. */
         if ((double)rand()/RAND_MAX < addprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
             void *val = (void*)(unsigned long)htHash(key,keylen);
-
             int retval1 = htAdd(ht,key,keylen,val);
             int retval2 = raxInsert(rax,key,keylen,val);
             if (retval1 != retval2) {
@@ -260,7 +265,11 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
             int retval1 = htRem(ht,key,keylen);
             int retval2 = raxRemove(rax,key,keylen);
             if (retval1 != retval2) {
-                printf("Fuzz: key deletion reported mismatching value in HT/RAX\n");
+                printf("Fuzz: key deletion of '%.*s' reported mismatching "
+                       "value in HT=%d RAX=%d\n",
+                       (int)keylen,(char*)key,retval1, retval2);
+                printf("%p\n", raxFind(rax,key,keylen));
+                printf("%p\n", raxNotFound);
                 return 1;
             }
         }
@@ -286,8 +295,9 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
         void *val1 = htFind(ht,iter.key,iter.key_len);
         void *val2 = raxFind(rax,iter.key,iter.key_len);
         if (val1 != val2 || val1 != expected) {
-            printf("Fuzz: HT=%p, RAX=%p, and expected=%p value do not match\n",
-                val1, val2, expected);
+            printf("Fuzz: HT=%p, RAX=%p, and expected=%p value do not match "
+                   "for key %.*s\n",
+                    val1, val2, expected, (int)iter.key_len,(char*)iter.key);
             return 1;
         }
         numkeys++;
@@ -365,7 +375,7 @@ int iteratorFuzzTest(int keymode, size_t count) {
     arrayItem *array = malloc(sizeof(arrayItem)*count);
 
     /* Fill a radix tree and a linear array with some data. */
-    unsigned char key[64];
+    unsigned char key[16];
     size_t j = 0;
     for (size_t i = 0; i < count; i++) {
         uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
@@ -521,9 +531,21 @@ int main(int argc, char **argv) {
     }
 
     if (do_fuzz) {
+        for (int i = 0; i < 10; i++) {
+            double alpha = (double)rand() / RAND_MAX;
+            double beta = 1-alpha;
+            if (fuzzTest(KEY_INT,rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_UNIQUE_ALPHA,rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM,rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM_ALPHA,rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM_SMALL_CSET,rand()%10000,alpha,beta)) errors++;
+        }
+
         if (fuzzTest(KEY_INT,1000000,.7,.3)) errors++;
         if (fuzzTest(KEY_UNIQUE_ALPHA,1000000,.7,.3)) errors++;
+        if (fuzzTest(KEY_RANDOM,1000000,.7,.3)) errors++;
         if (fuzzTest(KEY_RANDOM_ALPHA,1000000,.7,.3)) errors++;
+        if (fuzzTest(KEY_RANDOM_SMALL_CSET,1000000,.7,.3)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
