@@ -116,6 +116,7 @@ int htRem(hashtable *t, unsigned char *s, size_t len) {
     *parentlink = n->next;
     free(n->key);
     free(n);
+    t->numele--;
     return 1;
 }
 
@@ -228,7 +229,7 @@ static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
 /* -------------------------------------------------------------------------- */
 
 /* Perform a fuzz test, returns 0 on success, 1 on error. */
-int fuzzTest(int keymode, size_t count) {
+int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     hashtable *ht = htNew();
     rax *rax = raxNew();
 
@@ -238,14 +239,30 @@ int fuzzTest(int keymode, size_t count) {
     /* Perform random operations on both the dictionaries. */
     for (size_t i = 0; i < count; i++) {
         unsigned char key[64];
-        uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
-        void *val = (void*)(unsigned long)htHash(key,keylen);
+        uint32_t keylen;
 
-        int retval1 = htAdd(ht,key,keylen,val);
-        int retval2 = raxInsert(rax,key,keylen,val);
-        if (retval1 != retval2) {
-            printf("Fuzz: key insertion reported mismatching value in HT/RAX\n");
-            return 1;
+        /* Insert element. */
+        if ((double)rand()/RAND_MAX < addprob) {
+            keylen = int2key((char*)key,sizeof(key),i,keymode);
+            void *val = (void*)(unsigned long)htHash(key,keylen);
+
+            int retval1 = htAdd(ht,key,keylen,val);
+            int retval2 = raxInsert(rax,key,keylen,val);
+            if (retval1 != retval2) {
+                printf("Fuzz: key insertion reported mismatching value in HT/RAX\n");
+                return 1;
+            }
+        }
+
+        /* Remove element. */
+        if ((double)rand()/RAND_MAX < remprob) {
+            keylen = int2key((char*)key,sizeof(key),i,keymode);
+            int retval1 = htRem(ht,key,keylen);
+            int retval2 = raxRemove(rax,key,keylen);
+            if (retval1 != retval2) {
+                printf("Fuzz: key deletion reported mismatching value in HT/RAX\n");
+                return 1;
+            }
         }
     }
 
@@ -269,7 +286,7 @@ int fuzzTest(int keymode, size_t count) {
         void *val1 = htFind(ht,iter.key,iter.key_len);
         void *val2 = raxFind(rax,iter.key,iter.key_len);
         if (val1 != val2 || val1 != expected) {
-            printf("Fuzz: HT, RAX, and expected value do not match: %p %p %p\n",
+            printf("Fuzz: HT=%p, RAX=%p, and expected=%p value do not match\n",
                 val1, val2, expected);
             return 1;
         }
@@ -504,9 +521,9 @@ int main(int argc, char **argv) {
     }
 
     if (do_fuzz) {
-        if (fuzzTest(KEY_INT,1000000)) errors++;
-        if (fuzzTest(KEY_UNIQUE_ALPHA,1000000)) errors++;
-        if (fuzzTest(KEY_RANDOM_ALPHA,1000000)) errors++;
+        if (fuzzTest(KEY_INT,1000000,.7,.3)) errors++;
+        if (fuzzTest(KEY_UNIQUE_ALPHA,1000000,.7,.3)) errors++;
+        if (fuzzTest(KEY_RANDOM_ALPHA,1000000,.7,.3)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
