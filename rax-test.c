@@ -204,30 +204,40 @@ long long ustime(void) {
  *                   at every integer is mapped a different string.
  * KEY_RANDOM: Totally random string up to maxlen bytes.
  * KEY_RANDOM_ALPHA: Alphanumerical random string up to maxlen bytes.
- * KEY_RANDOM_SMALL_CSET: Small charset random strings. */
+ * KEY_RANDOM_SMALL_CSET: Small charset random strings.
+ * KEY_CHAIN: 'i' times the character "A". */
 #define KEY_INT 0
 #define KEY_UNIQUE_ALPHA 1
 #define KEY_RANDOM 2
 #define KEY_RANDOM_ALPHA 3
 #define KEY_RANDOM_SMALL_CSET 4
+#define KEY_CHAIN 5
 static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
     if (mode == KEY_INT) {
         return snprintf(s,maxlen,"%lu",(unsigned long)i);
     } else if (mode == KEY_UNIQUE_ALPHA) {
+        if (maxlen > 16) maxlen = 16;
         i = int2int(i);
         return int2alphakey(s,maxlen,i);
     } else if (mode == KEY_RANDOM) {
+        if (maxlen > 16) maxlen = 16;
         int r = rand() % maxlen;
         for (int i = 0; i < r; i++) s[i] = rand()&0xff;
         return r;
     } else if (mode == KEY_RANDOM_ALPHA) {
+        if (maxlen > 16) maxlen = 16;
         int r = rand() % maxlen;
         for (int i = 0; i < r; i++) s[i] = 'A'+rand()%('z'-'A'+1);
         return r;
     } else if (mode == KEY_RANDOM_SMALL_CSET) {
+        if (maxlen > 16) maxlen = 16;
         int r = rand() % maxlen;
         for (int i = 0; i < r; i++) s[i] = 'A'+rand()%4;
         return r;
+    } else if (mode == KEY_CHAIN) {
+        if (i > maxlen) i = maxlen;
+        memset(s,'A',i);
+        return i;
     } else {
         return 0;
     }
@@ -245,7 +255,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
 
     /* Perform random operations on both the dictionaries. */
     for (size_t i = 0; i < count; i++) {
-        unsigned char key[16];
+        unsigned char key[1024];
         uint32_t keylen;
 
         /* Insert element. */
@@ -376,7 +386,7 @@ int iteratorFuzzTest(int keymode, size_t count) {
     arrayItem *array = malloc(sizeof(arrayItem)*count);
 
     /* Fill a radix tree and a linear array with some data. */
-    unsigned char key[16];
+    unsigned char key[1024];
     size_t j = 0;
     for (size_t i = 0; i < count; i++) {
         uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
@@ -613,6 +623,7 @@ int main(int argc, char **argv) {
         if (fuzzTest(KEY_RANDOM,1000000,.7,.3)) errors++;
         if (fuzzTest(KEY_RANDOM_ALPHA,1000000,.7,.3)) errors++;
         if (fuzzTest(KEY_RANDOM_SMALL_CSET,1000000,.7,.3)) errors++;
+        if (fuzzTest(KEY_CHAIN,1000,.7,.3)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 10000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
