@@ -1,16 +1,24 @@
-DEBUG=-g -ggdb
-OPT=-O2
+DEBUG?= -g -ggdb
+CFLAGS?= -O2 -Wall -W -std=c99
 
-all: rax-test rax-oom-test rax-bench
+# CFLAGS+=-fprofile-arcs -ftest-coverage
+# LDFLAGS+=-lgcov
 
-rax-test: rax.c rax.h rax-test.c
-	$(CC) $(DEBUG) $(OPT) -Wall -W --std=c99 -o rax-test rax.c rax-test.c -g -ggdb
+PRGNAME = visitors
 
-rax-oom-test: rax.c rax.h rax-oom-test.c rax_oom_malloc.h
-	$(CC) $(DEBUG) $(OPT) -Wall -W --std=c99 -o rax-oom-test rax.c rax-oom-test.c -DRAX_MALLOC_INCLUDE='"rax_oom_malloc.h"' -g -ggdb
+all: rax-test rax-oom-test
 
-rax-bench: rax.c rax.h
-	$(CC) $(DEBUG) $(OPT) -Wall -W --std=c99 -o rax-bench rax.c -DBENCHMARK_MAIN -g -ggdb
+rax.o: rax.h
+rax-test.o: rax.h
+
+rax-test: rax-test.o rax.o
+	$(CC) -o rax-test $(CFLAGS) $(LDFLAGS) $(DEBUG) rax-test.o rax.o
+
+rax-oom-test: rax-oom-test.o rax.o
+	$(CC) -o rax-oom-test $(CFLAGS) $(LDFLAGS) $(DEBUG) rax-oom-test.o rax.o
+
+.c.o:
+	$(CC) -c $(CFLAGS) $(DEBUG) $<
 
 clean:
-	rm -f rax-test rax-bench
+	rm -f rax-test rax-oom-test *.gcda *.gcov *.gcno *.o
