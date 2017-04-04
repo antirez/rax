@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include "rax.h"
 
@@ -489,6 +490,72 @@ int regtest1(void) {
     return 0;
 }
 
+void benchmark(void) {
+    for (int mode = 0; mode < 2; mode++) {
+        printf("Benchmark with %s keys:\n",
+            (mode == 0) ? "integer" : "alphanumerical");
+        rax *t = raxNew();
+        long long start = ustime();
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            raxInsert(t,(unsigned char*)buf,len,(void*)(long)i);
+        }
+        printf("Insert: %f\n", (double)(ustime()-start)/1000000);
+        printf("%llu total nodes\n", (unsigned long long)t->numnodes);
+        printf("%llu total elements\n", (unsigned long long)t->numele);
+
+        start = ustime();
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            void *data = raxFind(t,(unsigned char*)buf,len);
+            if (data != (void*)(long)i) {
+                printf("Issue with %s: %p instead of %p\n", buf,
+                    data, (void*)(long)i);
+            }
+        }
+        printf("Linear lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int r = rand() % 5000000;
+            int len = int2key(buf,sizeof(buf),r,mode);
+            void *data = raxFind(t,(unsigned char*)buf,len);
+            if (data != (void*)(long)r) {
+                printf("Issue with %s: %p instead of %p\n", buf,
+                    data, (void*)(long)r);
+            }
+        }
+        printf("Random lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
+        int count = 0;
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            buf[i%len] = '!'; /* "!" is never set into keys. */
+            void *data = raxFind(t,(unsigned char*) buf,len);
+            if (data != (void*)(long)i) count++;
+        }
+        printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
+        for (int i = 0; i < 5000000; i++) {
+            char buf[64];
+            int len = int2key(buf,sizeof(buf),i,mode);
+            int retval = raxRemove(t,(unsigned char*)buf,len);
+            assert(retval == 1);
+        }
+        printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
+
+        printf("%llu total nodes\n", (unsigned long long)t->numnodes);
+        printf("%llu total elements\n", (unsigned long long)t->numele);
+        raxFree(t);
+    }
+}
+
 int main(int argc, char **argv) {
     srand(1234);
 
@@ -558,6 +625,10 @@ int main(int argc, char **argv) {
             }
         }
         printf("\n");
+    }
+
+    if (do_benchmark) {
+        benchmark();
     }
 
     if (errors) {
