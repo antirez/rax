@@ -1,10 +1,10 @@
 DEBUG?= -g -ggdb
 CFLAGS?= -O2 -Wall -W -std=c99
 
+# Uncomment the following two lines for coverage testing
+#
 # CFLAGS+=-fprofile-arcs -ftest-coverage
 # LDFLAGS+=-lgcov
-
-PRGNAME = visitors
 
 all: rax-test rax-oom-test
 
