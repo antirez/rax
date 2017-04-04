@@ -1025,6 +1025,9 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
             raxNode **cp = raxNodeLastChildPtr(h);
             memcpy(&h,cp,sizeof(h));
             if (h->iskey || (!h->iscompr && h->size != 1)) break;
+            /* Stop here if going to the next node would result into
+             * a compressed node larger than h->size can hold. */
+            if (comprsize + h->size > RAX_NODE_MAX_SIZE) break;
             nodes++;
             comprsize += h->size;
         }
