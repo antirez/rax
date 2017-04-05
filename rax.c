@@ -407,7 +407,7 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
  * data is updated, and 0 is returned, otherwise the element is inserted
  * and 1 is returned. On out of memory the function returns 0 as well but
  * sets errno to ENOMEM, otherwise errno will be set to 0. */
-int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
+int raxInsert(rax *rax, unsigned char *s, size_t len, void *data, void **old) {
     size_t i;
     int j = 0; /* Split position. If raxLowWalk() stops in a compressed
                   node, the index 'j' represents the char we stopped within the
@@ -425,6 +425,7 @@ int raxInsert(rax *rax, unsigned char *s, size_t len, void *data) {
      * data pointer. */
     if (i == len && (!h->iscompr || j == 0 /* not in the middle if j is 0 */)) {
         if (h->iskey) {
+            if (old) *old = raxGetData(h);
             raxSetData(h,data);
             errno = 0;
             return 0; /* Element already exists. */
@@ -784,7 +785,7 @@ oom:
         h->isnull = 1;
         h->iskey = 1;
         rax->numele++; /* Compensate the next remove. */
-        assert(raxRemove(rax,s,i) != 0);
+        assert(raxRemove(rax,s,i,NULL) != 0);
     }
     errno = ENOMEM;
     return 0;
@@ -888,7 +889,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
 
 /* Remove the specified item. Returns 1 if the item was found and
  * deleted, 0 otherwise. */
-int raxRemove(rax *rax, unsigned char *s, size_t len) {
+int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
     raxNode *h;
     raxStack ts;
 
@@ -900,6 +901,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len) {
         raxStackFree(&ts);
         return 0;
     }
+    if (old) *old = raxGetData(h);
     h->iskey = 0;
     rax->numele--;
 
@@ -1769,7 +1771,7 @@ int main(void) {
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
-            raxInsert(t,(unsigned char*)buf,len,(void*)(long)i);
+            raxInsert(t,(unsigned char*)buf,len,(void*)(long)i,NULL);
         }
         printf("Insert: %f\n", (double)(ustime()-start)/1000000);
         printf("%llu total nodes\n", (unsigned long long)t->numnodes);
@@ -1815,7 +1817,7 @@ int main(void) {
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
-            int retval = raxRemove(t,(unsigned char*)buf,len);
+            int retval = raxRemove(t,(unsigned char*)buf,len,NULL);
             assert(retval == 1);
         }
         printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
@@ -1844,7 +1846,7 @@ int main(void) {
     while(toadd[items] != NULL) items++;
 
     for (long i = 0; i < items; i++) {
-        raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
+        raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i,NULL);
         printf("Added %s\n", toadd[i]);
     }
     raxShow(t);
@@ -1911,11 +1913,11 @@ int main(void) {
     for (long i = 0; i < 1000; i++) {
         int r = rand() % items;
         if (r == survivor) continue;
-        raxRemove(t,(unsigned char*)toadd[r],strlen(toadd[r]));
+        raxRemove(t,(unsigned char*)toadd[r],strlen(toadd[r]),NULL);
     }
 #else
     printf("Removing rubicon\n");
-    raxRemove(t,(unsigned char*)"rubicon",7);
+    raxRemove(t,(unsigned char*)"rubicon",7,NULL);
 #endif
 
     printf("%llu total nodes\n", (unsigned long long)t->numnodes);

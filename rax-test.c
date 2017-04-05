@@ -263,7 +263,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
             void *val = (void*)(unsigned long)htHash(key,keylen);
             int retval1 = htAdd(ht,key,keylen,val);
-            int retval2 = raxInsert(rax,key,keylen,val);
+            int retval2 = raxInsert(rax,key,keylen,val,NULL);
             if (retval1 != retval2) {
                 printf("Fuzz: key insertion reported mismatching value in HT/RAX\n");
                 return 1;
@@ -274,7 +274,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
         if ((double)rand()/RAND_MAX < remprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
             int retval1 = htRem(ht,key,keylen);
-            int retval2 = raxRemove(rax,key,keylen);
+            int retval2 = raxRemove(rax,key,keylen,NULL);
             if (retval1 != retval2) {
                 printf("Fuzz: key deletion of '%.*s' reported mismatching "
                        "value in HT=%d RAX=%d\n",
@@ -392,7 +392,7 @@ int iteratorFuzzTest(int keymode, size_t count) {
         uint32_t keylen = int2key((char*)key,sizeof(key),i,keymode);
         void *val = (void*)(unsigned long)htHash(key,keylen);
 
-        if (raxInsert(rax,key,keylen,val)) {
+        if (raxInsert(rax,key,keylen,val,NULL)) {
             array[j].key = malloc(keylen);
             array[j].key_len = keylen;
             memcpy(array[j].key,key,keylen);
@@ -481,7 +481,7 @@ int randomWalkTest(void) {
     long numele;
     for (numele = 0; toadd[numele] != NULL; numele++) {
         raxInsert(t,(unsigned char*)toadd[numele],
-                    strlen(toadd[numele]),(void*)numele);
+                    strlen(toadd[numele]),(void*)numele,NULL);
     }
 
     raxIterator iter;
@@ -516,11 +516,11 @@ int randomWalkTest(void) {
 /* Regression test #1: Iterator wrong element returned after seek. */
 int regtest1(void) {
     rax *rax = raxNew();
-    raxInsert(rax,(unsigned char*)"LKE",3,(void*)(long)1);
-    raxInsert(rax,(unsigned char*)"TQ",2,(void*)(long)2);
-    raxInsert(rax,(unsigned char*)"B",1,(void*)(long)3);
-    raxInsert(rax,(unsigned char*)"FY",2,(void*)(long)4);
-    raxInsert(rax,(unsigned char*)"WI",2,(void*)(long)5);
+    raxInsert(rax,(unsigned char*)"LKE",3,(void*)(long)1,NULL);
+    raxInsert(rax,(unsigned char*)"TQ",2,(void*)(long)2,NULL);
+    raxInsert(rax,(unsigned char*)"B",1,(void*)(long)3,NULL);
+    raxInsert(rax,(unsigned char*)"FY",2,(void*)(long)4,NULL);
+    raxInsert(rax,(unsigned char*)"WI",2,(void*)(long)5,NULL);
 
     raxIterator iter;
     raxStart(&iter,rax);
@@ -549,7 +549,7 @@ void benchmark(void) {
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
-            raxInsert(t,(unsigned char*)buf,len,(void*)(long)i);
+            raxInsert(t,(unsigned char*)buf,len,(void*)(long)i,NULL);
         }
         printf("Insert: %f\n", (double)(ustime()-start)/1000000);
         printf("%llu total nodes\n", (unsigned long long)t->numnodes);
@@ -595,7 +595,7 @@ void benchmark(void) {
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
-            int retval = raxRemove(t,(unsigned char*)buf,len);
+            int retval = raxRemove(t,(unsigned char*)buf,len,NULL);
             assert(retval == 1);
         }
         printf("Deletion: %f\n", (double)(ustime()-start)/1000000);
