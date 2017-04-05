@@ -301,7 +301,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     raxSeek(&iter,NULL,0,"^");
 
     size_t numkeys = 0;
-    while(raxNext(&iter,NULL,0,NULL)) {
+    while(raxNext(&iter)) {
         void *expected = (void*)(unsigned long)htHash(iter.key,iter.key_len);
         void *val1 = htFind(ht,iter.key,iter.key_len);
         void *val2 = raxFind(rax,iter.key,iter.key_len);
@@ -433,10 +433,10 @@ int iteratorFuzzTest(int keymode, size_t count) {
         }
 
         if (next) {
-            rax_res = raxNext(&iter,NULL,0,NULL);
+            rax_res = raxNext(&iter);
             if (array_res) seekidx++;
         } else {
-            rax_res = raxPrev(&iter,NULL,0,NULL);
+            rax_res = raxPrev(&iter);
             if (array_res) seekidx--;
         }
 
@@ -559,7 +559,7 @@ int iteratorUnitTests(void) {
     for (int i = 0; tests[i].expected != NULL; i++) {
         raxSeek(&iter,(unsigned char*)tests[i].seek,
                 tests[i].seeklen, tests[i].seekop);
-        int retval = raxNext(&iter,NULL,0,NULL);
+        int retval = raxNext(&iter);
 
         if (tests[i].expected != NULL) {
             if (strlen(tests[i].expected) != iter.key_len ||
@@ -596,7 +596,7 @@ int regtest1(void) {
     raxIterator iter;
     raxStart(&iter,rax);
     raxSeek(&iter,(unsigned char*)"FMP",3,">");
-    if (raxNext(&iter,NULL,0,NULL)) {
+    if (raxNext(&iter)) {
         if (iter.key_len != 2 ||
             memcmp(iter.key,"FY",2))
         {

@@ -1530,7 +1530,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
 /* Go to the next element in the scope of the iterator 'it'.
  * If EOF (or out of memory) is reached, 0 is returned, otherwise 1 is
  * returned. In case 0 is returned because of OOM, errno is set to ENOMEM. */
-int raxNext(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
+int raxNext(raxIterator *it) {
     if (!raxIteratorNextStep(it,0)) {
         errno = ENOMEM;
         return 0;
@@ -1545,7 +1545,7 @@ int raxNext(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
 /* Go to the previous element in the scope of the iterator 'it'.
  * If EOF (or out of memory) is reached, 0 is returned, otherwise 1 is
  * returned. In case 0 is returned because of OOM, errno is set to ENOMEM. */
-int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
+int raxPrev(raxIterator *it) {
     if (!raxIteratorPrevStep(it,0)) {
         errno = ENOMEM;
         return 0;
