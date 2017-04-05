@@ -1,15 +1,11 @@
 ASAP
 ===
 
-* Change the API so that there is always the ability to return the old value
-  both when adding (updating) and removing elements.
+* Check failed lookup test speed regression after a given commit.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
-* Test with gcov that coverage is 100% as expected.
-* Check if reclaiming nodes from first to last child is a performance
-  improvement in radtreeFree().
-* Random element function: perform log(N) random steps followed by rand(log(N)) steps. Extraction will be biased but may be enough for many uses. Test the quality of the generated elements against a few average credible data sets, like Object:<id> or alike.
+* Check if reclaiming nodes from first to last child is a performance improvement in radtreeFree().
 * Move the residual tests inside rax.c into rax-test.c.
 * Explicit unit test with NULL values
 * Explocit unit test with empty string
