@@ -473,6 +473,46 @@ int iteratorFuzzTest(int keymode, size_t count) {
     return 0;
 }
 
+/* Test the random walk function. */
+int randomWalkTest(void) {
+    rax *t = raxNew();
+    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
+
+    long numele;
+    for (numele = 0; toadd[numele] != NULL; numele++) {
+        raxInsert(t,(unsigned char*)toadd[numele],
+                    strlen(toadd[numele]),(void*)numele);
+    }
+
+    raxIterator iter;
+    raxStart(&iter,t);
+    raxSeek(&iter,NULL,0,"^");
+    int maxloops = 100000;
+    while(raxRandomWalk(&iter,0) && maxloops--) {
+        int nulls = 0;
+        for (long i = 0; i < numele; i++) {
+            if (toadd[i] == NULL) {
+                nulls++;
+                continue;
+            }
+            if (strlen(toadd[i]) == iter.key_len &&
+                memcmp(toadd[i],iter.key,iter.key_len) == 0)
+            {
+                toadd[i] = NULL;
+                nulls++;
+            }
+        }
+        if (nulls == numele) break;
+    }
+    if (maxloops == 0) {
+        printf("randomWalkTest() is unable to report all the elements "
+               "after 100k iterations!\n");
+        return 1;
+    }
+    raxStop(&iter);
+    return 0;
+}
+
 /* Regression test #1: Iterator wrong element returned after seek. */
 int regtest1(void) {
     rax *rax = raxNew();
@@ -600,6 +640,12 @@ int main(int argc, char **argv) {
     }
 
     int errors = 0;
+
+    if (do_units) {
+        printf("Unit tests: "); fflush(stdout);
+        if (randomWalkTest()) errors++;
+        if (errors == 0) printf("OK\n");
+    }
 
     if (do_regression) {
         printf("Performing regression tests: "); fflush(stdout);

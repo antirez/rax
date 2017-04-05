@@ -152,6 +152,7 @@ void raxStart(raxIterator *it, rax *rt);
 int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op);
 int raxNext(raxIterator *it, unsigned char *stop, size_t stoplen, char *op);
 int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op);
+int raxRandomWalk(raxIterator *it, size_t steps);
 void raxStop(raxIterator *it);
 void raxShow(rax *rax);
 

@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
+#include <math.h>
 #include "rax.h"
 
 #ifndef RAX_MALLOC_INCLUDE
@@ -1551,6 +1552,57 @@ int raxPrev(raxIterator *it, unsigned char *stop, size_t stoplen, char *op) {
         errno = 0;
         return 0;
     }
+    return 1;
+}
+
+/* Perform a random walk starting in the current position of the iterator.
+ * Return 0 if the tree is empty or on out of memory. Otherwise 1 is returned
+ * and the iterator is set to the node reached after doing a random walk
+ * of 'steps' steps. If the 'steps' argument is 0, the random walk is performed
+ * using a random number of steps between 1 and two times the logarithm of
+ * the number of elements.
+ *
+ * NOTE: if you use this function to generate random elements from the radix
+ * tree, expect a disappointing distribution. A random walk produces good
+ * random elements if the tree is not sparse, however in the case of a radix
+ * tree certain keys will be reported much more often than others. At least
+ * this function should be able to expore every possible element eventually. */
+int raxRandomWalk(raxIterator *it, size_t steps) {
+    if (it->rt->numele == 0) {
+        it->flags |= RAX_ITER_EOF;
+        return 0;
+    }
+
+    if (steps == 0) {
+        size_t fle = floor(log(it->rt->numele));
+        fle *= 2;
+        steps = 1 + rand() % fle;
+    }
+
+    raxNode *n = it->node;
+    while(steps > 0 || !n->iskey) {
+        int numchildren = n->iscompr ? 1 : n->size;
+        int r = rand() % (numchildren+(n != it->rt->head));
+
+        if (r == numchildren) {
+            /* Go up to parent. */
+            n = raxStackPop(&it->stack);
+            int todel = n->iscompr ? n->size : 1;
+            raxIteratorDelChars(it,todel);
+        } else {
+            /* Select a random child. */
+            if (n->iscompr) {
+                if (!raxIteratorAddChars(it,n->data,n->size)) return 0;
+            } else {
+                if (!raxIteratorAddChars(it,n->data+r,1)) return 0;
+            }
+            raxNode **cp = raxNodeFirstChildPtr(n)+r;
+            if (!raxStackPush(&it->stack,n)) return 0;
+            memcpy(&n,cp,sizeof(n));
+        }
+        if (n->iskey) steps--;
+    }
+    it->node = n;
     return 1;
 }
 
