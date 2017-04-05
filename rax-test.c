@@ -513,6 +513,77 @@ int randomWalkTest(void) {
     return 0;
 }
 
+int iteratorUnitTests(void) {
+    rax *t = raxNew();
+    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
+
+    srand(time(NULL));
+    for (int x = 0; x < 10000; x++) rand();
+
+    long items = 0;
+    while(toadd[items] != NULL) items++;
+
+    for (long i = 0; i < items; i++)
+        raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i,NULL);
+
+    raxIterator iter;
+    raxStart(&iter,t);
+
+    struct {
+        char *seek;
+        size_t seeklen;
+        char *seekop;
+        char *expected;
+    } tests[] = {
+        /* Seek value. */       /* Expected result. */
+        {"rpxxx",5,"<=",         "romulus"},
+        {"rom",3,">=",           "romane"},
+        {"rub",3,">=",           "rub"},
+        {"rub",3,">",            "rubens"},
+        {"rub",3,"<",            "romulus"},
+        {"rom",3,">",            "romane"},
+        {"chro",4,">",           "chromodynamic"},
+        {"chro",4,"<",           "baloon"},
+        {"chromz",6,"<",         "chromodynamic"},
+        {"",0,"^",               "alien"},
+        {"zorro",5,"<=",         "rubicundus"},
+        {"zorro",5,"<",          "rubicundus"},
+        {"zorro",5,"<",          "rubicundus"},
+        {"",0,"$",               "rubicundus"},
+        {"ro",2,">=",            "romane"},
+        {"zo",2,">",             NULL},
+        {"zo",2,"==",            NULL},
+        {"romane",6,"==",        "romane"}
+    };
+
+    for (int i = 0; tests[i].expected != NULL; i++) {
+        raxSeek(&iter,(unsigned char*)tests[i].seek,
+                tests[i].seeklen, tests[i].seekop);
+        int retval = raxNext(&iter,NULL,0,NULL);
+
+        if (tests[i].expected != NULL) {
+            if (strlen(tests[i].expected) != iter.key_len ||
+                memcmp(tests[i].expected,iter.key,iter.key_len) != 0)
+            {
+                printf("Iterator unit test error: "
+                       "test %d, %s expected, %.*s reported\n",
+                       i, tests[i].expected, (int)iter.key_len,
+                       (char*)iter.key);
+                return 1;
+            }
+        } else {
+            if (retval != 0) {
+                printf("Iterator unit test error: "
+                       "EOF expected in test %d\n", i);
+                return 1;
+            }
+        }
+    }
+    raxStop(&iter);
+    raxFree(t);
+    return 0;
+}
+
 /* Regression test #1: Iterator wrong element returned after seek. */
 int regtest1(void) {
     rax *rax = raxNew();
@@ -644,6 +715,7 @@ int main(int argc, char **argv) {
     if (do_units) {
         printf("Unit tests: "); fflush(stdout);
         if (randomWalkTest()) errors++;
+        if (iteratorUnitTests()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
