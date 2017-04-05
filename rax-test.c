@@ -298,7 +298,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     /* Check that elements match. */
     raxIterator iter;
     raxStart(&iter,rax);
-    raxSeek(&iter,NULL,0,"^");
+    raxSeek(&iter,"^",NULL,0);
 
     size_t numkeys = 0;
     while(raxNext(&iter)) {
@@ -411,7 +411,7 @@ int iteratorFuzzTest(int keymode, size_t count) {
     raxStart(&iter,rax);
     char *seekops[] = {"==",">=","<=",">","<","^","$"};
     char *seekop = seekops[rand() % 7];
-    raxSeek(&iter,key,keylen,seekop);
+    raxSeek(&iter,seekop,key,keylen);
     int seekidx = arraySeek(array,count,key,keylen,seekop);
 
     int next = rand() % 2;
@@ -486,7 +486,7 @@ int randomWalkTest(void) {
 
     raxIterator iter;
     raxStart(&iter,t);
-    raxSeek(&iter,NULL,0,"^");
+    raxSeek(&iter,"^",NULL,0);
     int maxloops = 100000;
     while(raxRandomWalk(&iter,0) && maxloops--) {
         int nulls = 0;
@@ -557,8 +557,8 @@ int iteratorUnitTests(void) {
     };
 
     for (int i = 0; tests[i].expected != NULL; i++) {
-        raxSeek(&iter,(unsigned char*)tests[i].seek,
-                tests[i].seeklen, tests[i].seekop);
+        raxSeek(&iter,tests[i].seekop,(unsigned char*)tests[i].seek,
+                tests[i].seeklen);
         int retval = raxNext(&iter);
 
         if (tests[i].expected != NULL) {
@@ -595,7 +595,7 @@ int regtest1(void) {
 
     raxIterator iter;
     raxStart(&iter,rax);
-    raxSeek(&iter,(unsigned char*)"FMP",3,">");
+    raxSeek(&iter,">",(unsigned char*)"FMP",3);
     if (raxNext(&iter)) {
         if (iter.key_len != 2 ||
             memcmp(iter.key,"FY",2))

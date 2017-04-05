@@ -10,6 +10,7 @@ all: rax-test rax-oom-test
 
 rax.o: rax.h
 rax-test.o: rax.h
+rax-oom-test.o: rax.h
 
 rax-test: rax-test.o rax.o
 	$(CC) -o rax-test $(CFLAGS) $(LDFLAGS) $(DEBUG) rax-test.o rax.o

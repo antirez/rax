@@ -1,6 +1,7 @@
 ASAP
 ===
 
+* Write tests for raxCompare().
 * Check failed lookup test speed regression after a given commit.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty.
   string set/get and iteration.

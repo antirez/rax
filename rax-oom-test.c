@@ -50,7 +50,7 @@ int oomtest(int cycle) {
 
     unsigned long failed_insertions = 0;
     for (unsigned long i = 0; i < items; i++) {
-        int retval = raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i);
+        int retval = raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)i,NULL);
         if (retval == 0) {
             if (errno != ENOMEM) {
                 printf("Insertion failed but errno != ENOMEM!\n");
@@ -108,8 +108,8 @@ int oomtest(int cycle) {
     int r = rand() % (sizeof(seek_places) / sizeof(seek_places[0]));
 
     printf("Seeking %s %s\n", seek_places[r].op, seek_places[r].str);
-    if (raxSeek(&iter,(unsigned char*)seek_places[r].str,seek_places[r].len,
-                                      seek_places[r].op) == 0)
+    if (raxSeek(&iter,seek_places[r].op,(unsigned char*)seek_places[r].str,
+                seek_places[r].len) == 0)
     {
         goto cleanup;
     }
@@ -117,7 +117,7 @@ int oomtest(int cycle) {
     int check_iterator_count = 1;
     unsigned long steps = 0;
 
-    while(raxNext(&iter,NULL,0,NULL)) {
+    while(raxNext(&iter)) {
         printf("NEXT: %.*s, val %p\n", (int)iter.key_len,
                                       (char*)iter.key,
                                       iter.data);
@@ -129,13 +129,13 @@ int oomtest(int cycle) {
     }
 
     printf("Seeking %s %s\n", seek_places[r].op, seek_places[r].str);
-    if (raxSeek(&iter,(unsigned char*)seek_places[r].str,seek_places[r].len,
-                                      seek_places[r].op) == 0)
+    if (raxSeek(&iter,seek_places[r].op,(unsigned char*)seek_places[r].str,
+                seek_places[r].len) == 0)
     {
         goto cleanup;
     }
 
-    while(raxPrev(&iter,NULL,0,NULL)) {
+    while(raxPrev(&iter)) {
         printf("PREV: %.*s, val %p\n", (int)iter.key_len,
                                       (char*)iter.key,
                                       iter.data);

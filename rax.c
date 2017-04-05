@@ -1363,7 +1363,7 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
  * 1 is returned. When 0 is returned for out of memory, errno is set to
  * the ENOMEM value. */
-int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
+int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
     it->stack.items = 0; /* Just resetting. Intialized by raxStart(). */
@@ -1400,7 +1400,7 @@ int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op) {
     if (first) {
         /* Seeking the first key greater or equal to the empty string
          * is equivalent to seeking the smaller key available. */
-        return raxSeek(it,NULL,0,">=");
+        return raxSeek(it,">=",NULL,0);
     }
 
     if (last) {
@@ -1606,6 +1606,36 @@ int raxRandomWalk(raxIterator *it, size_t steps) {
     }
     it->node = n;
     return 1;
+}
+
+/* Compare the key currently pointed by the iterator to the specified
+ * key according to the specified operator. Returns 1 if the comparison is
+ * true, otherwise 0 is returned. */
+int raxCompare(raxIterator *iter, const char *op, unsigned char *key, size_t key_len) {
+    int eq = 0, lt = 0, gt = 0;
+
+    if (op[0] == '=' || op[1] == '=') eq = 1;
+    if (op[1] == '>') gt = 1;
+    else if (op[1] == '<') lt = 1;
+    else if (op[1] != '=') return 0; /* Syntax error. */
+
+    size_t minlen = key_len < iter->key_len ? key_len : iter->key_len;
+    int cmp = memcmp(iter->key,key,minlen);
+
+    /* Handle == */
+    if (lt == 0 && gt == 0) return cmp == 0 && key_len == iter->key_len;
+
+    /* Handle >, >=, <, <= */
+    if (cmp == 0) {
+        /* Same prefix: longer wins. */
+        if (eq && key_len == iter->key_len) return 1;
+        else if (lt) return iter->key_len < key_len;
+        else if (gt) return iter->key_len > key_len;
+    } if (cmp > 0) {
+        return gt ? 1 : 0;
+    } else /* (cmp < 0) */ {
+        return lt ? 1 : 0;
+    }
 }
 
 /* Free the iterator. */
