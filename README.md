@@ -331,6 +331,16 @@ with the same probability is not possible if we require that:
 
 However a random walk which is long enough, in trees that are more or less balanced, produces acceptable results, is fast, and eventually returns every possible element, even if not with the right probability.
 
+To perform a random walk, just seek an iterator everywhere and call the
+following fuction:
+
+    int raxRandomWalk(raxIterator *it, size_t steps);
+
+If the number of steps is set to 0, the funciton will perform a number of
+random walk steps between 1 and two times the logarithm in base two of the
+number of elements inside the tree, which is often enough to get a decent
+result. Otherwise, you may specify the exact number of steps to take.
+
 ## Printing trees
 
 For debugging purposes, or educational ones, it is possible to use the
