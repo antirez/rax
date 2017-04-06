@@ -1,5 +1,6 @@
 DEBUG?= -g -ggdb
 CFLAGS?= -O2 -Wall -W -std=c99
+LDFLAGS= -lm
 
 # Uncomment the following two lines for coverage testing
 #
