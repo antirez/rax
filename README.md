@@ -380,7 +380,7 @@ To test Rax under OOM conditions:
 The last one is very verbose currently.
 
 In order to test with Valgrind, just run the tests using it, however
-if you want accurate leaks detection, let Valgrind rnu the *whole* test,
+if you want accurate leaks detection, let Valgrind run the *whole* test,
 since if you stop it earlier it will detect a lot of false positive memory
 leaks. This is due to the fact that Rax put pointers at unaligned addresses
 with `memcpy`, so it is not obvious where pointers are stored for Valgrind,
