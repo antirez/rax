@@ -161,7 +161,7 @@ Iterators are normally declared as local variables allocated on the stack,
 and then initialized with the `raxStart` function:
 
     raxIterator iter;
-    raxStart(&iter, rt);
+    raxStart(&iter, rt); // Note that 'rt' is the radix tree pointer.
 
 The function `raxStart` never fails and returns no value.
 Once an iterator is initialized, it can be sought (sought is the past tens
