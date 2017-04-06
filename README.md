@@ -125,7 +125,7 @@ are trying to access is not there, so an example usage is the following:
     if (data == raxNotFound) return;
     printf("Key value is %p\n", data);
 
-raxFind() is a real only function so no out of memory conditions are
+raxFind() is a read only function so no out of memory conditions are
 possible, the function never fails.
 
 ## Deleting keys
@@ -189,7 +189,7 @@ Once the iterator is sought, it is possible to iterate using the function
     }
 
 The function `raxNext` returns elements starting from the element sought
-with `raxSeek`, till the final element of the tree. When there are no longer
+with `raxSeek`, till the final element of the tree. When there are no more
 elements, 0 is returned, otherwise the function returns 1. However the function
 may return 0 when an out of memory condition happens as well: while it attempts
 to always use the stack, if the tree depth is large or the keys are big the
@@ -201,8 +201,8 @@ element.
 
 # Releasing iterators
 
-An iterator can be used multiple time, and can be sought again and again
-using `raxSeek` without any need to call `raxStart` again. However when the
+An iterator can be used multiple times, and can be sought again and again
+using `raxSeek` without any need to call `raxStart` again. However, when the
 iterator is not going to be used again, its memory must be reclaimed
 with the following call:
 
@@ -230,8 +230,8 @@ other operators are available. The first set are pretty obvious:
 * `>=` seek the element equal, or immediately greater than the given one.
 * `<` seek the element immediately smaller than the given one.
 * `<=` seek the element equal, or immediately smaller than the given one.
-* `^` seek the smaller element of the radix tree.
-* `$` seek the greater element of the radix tree.
+* `^` seek the smallest element of the radix tree.
+* `$` seek the greatest element of the radix tree.
 
 When the last two operators, `^` or `$` are used, the key and key length
 argument passed are completely ignored since they are not relevant.
@@ -277,16 +277,16 @@ compared to the provided key, otherwise 0 is returned.
 
 ## Modifying the radix tree while iterating
 
-In order to be efficient, the Rax iterators cache the exact node we are at,
+In order to be efficient, the Rax iterator caches the exact node we are at,
 so that at the next iteration step, it can start from where it left.
-However inside the iterator there is all the state in order to re-seek again
+However an iterator has sufficient state in order to re-seek again
 in case the cached node pointers are no longer valid. This problem happens
 when we want to modify a radix tree during an iteration. A common pattern
 is, for instance, deleting all the elements that match a given condition.
 
 Fortunately there is a very simple way to do this, and the efficiency cost
-is only payed as needed, that is, only when actually the tree is modified.
-The solution consists into seeking again the iterator, with the current key,
+is only paid as needed, that is, only when the tree is actually modified.
+The solution consists of seeking the iterator again, with the current key,
 once the tree is modified, like in the following example:
 
     while(raxNext(&iter,...)) {
@@ -301,14 +301,14 @@ need to do is to seek it again using the current element and the `>` seek
 operator: this way we'll move to the next element with a new state representing
 the current radix tree (after the change).
 
-The same idea can be used in different contexts, what to take in mind is:
+The same idea can be used in different contexts, considering the following:
 
 * Iterators need to be sought again with `raxSeek` every time keys are added or removed while iterating.
 * The current iterator key is always valid to access via `iter.key_size` and `iter.key`, even after it was deleted from the radix tree.
 
 ## Re-seeking iterators after EOF
 
-After iteration reaches an EOF condition since there are no longer elements
+After iteration reaches an EOF condition since there are no more elements
 to return, because we reached one or the other end of the radix tree, the
 EOF condition is permanent, and even iterating in the reverse direction will
 not produce any result.
@@ -341,7 +341,7 @@ with the same probability is not possible if we require that:
 
 However a random walk which is long enough, in trees that are more or less balanced, produces acceptable results, is fast, and eventually returns every possible element, even if not with the right probability.
 
-To perform a random walk, just seek an iterator everywhere and call the
+To perform a random walk, just seek an iterator anywhere and call the
 following function:
 
     int raxRandomWalk(raxIterator *it, size_t steps);
