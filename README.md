@@ -18,13 +18,13 @@ for people to use and in order to share bug fixes. The project relies a lot
 on fuzz testing techniques in order to explore not just all the lines of code
 the project is composed of, but a large amount of possible states.
 
-Rax is an open soruce project, released under the BSD two clause license.
+Rax is an open source project, released under the BSD two clause license.
 
 Major features:
 
 * Memory conscious:
     + Packed nodes representation.
-    + Able to avoid storing a NULL pointer inside the node if the key is set to NULL (there is an `isnull` bit in th node header).
+    + Able to avoid storing a NULL pointer inside the node if the key is set to NULL (there is an `isnull` bit in the node header).
     + Lack of parent node reference. A stack is used instead when needed.
 * Fast lookups:
     + Edges are stored as arrays of bytes directly in the parent node, no need to access non useful children while trying to find a match. This translates into less cache misses compared to other implementations.
@@ -342,11 +342,11 @@ with the same probability is not possible if we require that:
 However a random walk which is long enough, in trees that are more or less balanced, produces acceptable results, is fast, and eventually returns every possible element, even if not with the right probability.
 
 To perform a random walk, just seek an iterator everywhere and call the
-following fuction:
+following function:
 
     int raxRandomWalk(raxIterator *it, size_t steps);
 
-If the number of steps is set to 0, the funciton will perform a number of
+If the number of steps is set to 0, the function will perform a number of
 random walk steps between 1 and two times the logarithm in base two of the
 number of elements inside the tree, which is often enough to get a decent
 result. Otherwise, you may specify the exact number of steps to take.
