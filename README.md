@@ -229,7 +229,7 @@ other operators are available. The first set are pretty obvious:
 * `<` seek the element immediately smaller than the given one.
 * `<=` seek the element equal, or immediately smaller than the given one.
 * `^` seek the smaller element of the radix tree.
-* '$' seek the greater element of the radix tree.
+* `$` seek the greater element of the radix tree.
 
 When the last two operators, `^` or `$` are used, the key and key length
 argument passed are completely ignored since they are not relevant.
