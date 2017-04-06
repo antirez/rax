@@ -14,10 +14,10 @@ rax-test.o: rax.h
 rax-oom-test.o: rax.h
 
 rax-test: rax-test.o rax.o
-	$(CC) -o rax-test $(CFLAGS) $(LDFLAGS) $(DEBUG) rax-test.o rax.o
+	$(CC) -o $@ $^ $(LDFLAGS) $(DEBUG)
 
 rax-oom-test: rax-oom-test.o rax.o
-	$(CC) -o rax-oom-test $(CFLAGS) $(LDFLAGS) $(DEBUG) rax-oom-test.o rax.o
+	$(CC) -o $@ $^ $(LDFLAGS) $(DEBUG)
 
 .c.o:
 	$(CC) -c $(CFLAGS) $(DEBUG) $<
