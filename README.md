@@ -265,11 +265,19 @@ doing:
 The above code shows a complete range iterator just printing the keys
 traversed by iterating.
 
+The prototype of the `raxCompare` function is the following:
+
+    int raxCompare(raxIterator *iter, const char *op, unsigned char *key, size_t key_len);
+
+The operators supported are `>`, `>=`, `<`, `<=`, `==`.
+The function returns 1 if the current iterator key satisfies the operator
+compared to the provided key, otherwise 0 is returned.
+
 ## Modifying the radix tree while iterating
 
 In order to be efficient, the Rax iterators cache the exact node we are at,
 so that at the next iteration step, it can start from where it left.
-However inside the iterator there is all the state in order to reseek again
+However inside the iterator there is all the state in order to re-seek again
 in case the cached node pointers are no longer valid. This problem happens
 when we want to modify a radix tree during an iteration. A common pattern
 is, for instance, deleting all the elements that match a given condition.
