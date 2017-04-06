@@ -2,14 +2,13 @@ ASAP
 ===
 
 * Write tests for raxCompare().
-* Check failed lookup test speed regression after a given commit.
+* Check recent failed lookup test speed regression.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty.
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Check if reclaiming nodes from first to last child is a performance improvement in `radtreeFree()`.
 * Explicit unit test with `NULL` values.
 * Explocit unit test with empty string.
-* Finish `README`.
 * Turn repository into public.
 
 Potential features to add in the future

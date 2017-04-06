@@ -341,3 +341,22 @@ and the nodes it is composed of:
 
 However note that this works well enough for trees with a few elements, but
 becomes hard to read for very large trees.
+
+# Running the Rax tests
+
+To run the tests try:
+
+    $ make
+    $ ./rax-test
+
+To run the benchmark:
+
+    $ make
+    $ ./rax-test --bench
+
+To test Rax under OOM conditions:
+
+    $ make
+    $ ./rax-oom-test
+
+The last one is very verbose currently.
