@@ -97,7 +97,7 @@ In order to insert a new key, the following function is used:
 
 Example usage:
 
-    raxAdd(rt,(unsigned char*)"mykey",5,some_void_value,NULL);
+    raxInsert(rt,(unsigned char*)"mykey",5,some_void_value,NULL);
 
 The function returns 1 if the key was inserted correctly, or 0 if the key
 was already in the radix tree: in this case, the value is updated. The
@@ -161,7 +161,7 @@ Iterators are normally declared as local variables allocated on the stack,
 and then initialized with the `raxStart` function:
 
     raxIterator iter;
-    raxStart(&iter);
+    raxStart(&iter, rt);
 
 The function `raxStart` never fails and returns no value.
 Once an iterator is initialized, it can be sought (sought is the past tens
