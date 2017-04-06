@@ -362,6 +362,46 @@ and the nodes it is composed of:
 However note that this works well enough for trees with a few elements, but
 becomes hard to read for very large trees.
 
+The following is an example of the output raxShow() produces after adding
+the specified keys and values:
+
+* alligator = (nil)
+* alien = 0x1
+* baloon = 0x2
+* chromodynamic = 0x3
+* romane = 0x4
+* romanus = 0x5
+* romulus = 0x6
+* rubens = 0x7
+* ruber = 0x8
+* rubicon = 0x9
+* rubicundus = 0xa
+* all = 0xb
+* rub = 0xc
+* ba = 0xd
+
+```
+[abcr]
+ `-(a) [l] -> [il]
+               `-(i) "en" -> []=0x1
+               `-(l) "igator"=0xb -> []=(nil)
+ `-(b) [a] -> "loon"=0xd -> []=0x2
+ `-(c) "hromodynamic" -> []=0x3
+ `-(r) [ou]
+        `-(o) [m] -> [au]
+                      `-(a) [n] -> [eu]
+                                    `-(e) []=0x4
+                                    `-(u) [s] -> []=0x5
+                      `-(u) "lus" -> []=0x6
+        `-(u) [b] -> [ei]=0xc
+                      `-(e) [nr]
+                             `-(n) [s] -> []=0x7
+                             `-(r) []=0x8
+                      `-(i) [c] -> [ou]
+                                    `-(o) [n] -> []=0x9
+                                    `-(u) "ndus" -> []=0xa
+```
+
 # Running the Rax tests
 
 To run the tests try:
