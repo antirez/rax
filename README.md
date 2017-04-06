@@ -18,6 +18,8 @@ for people to use and in order to share bug fixes. The project relies a lot
 on fuzz testing techniques in order to explore not just all the lines of code
 the project is composed of, but a large amount of possible states.
 
+Rax is an open soruce project, released under the BSD two clause license.
+
 Major features:
 
 * Memory conscious:
