@@ -652,13 +652,14 @@ void benchmark(void) {
         printf("Random lookup: %f\n", (double)(ustime()-start)/1000000);
 
         start = ustime();
-        int count = 0;
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
             int len = int2key(buf,sizeof(buf),i,mode);
             buf[i%len] = '!'; /* "!" is never set into keys. */
             void *data = raxFind(t,(unsigned char*) buf,len);
-            if (data != (void*)(long)i) count++;
+            if (data != raxNotFound) {
+                printf("Failed lookup did not reported NOT FOUND!\n");
+            }
         }
         printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
 

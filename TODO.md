@@ -2,7 +2,6 @@ ASAP
 ===
 
 * Write tests for raxCompare().
-* Check recent failed lookup test speed regression.
 * Test the insertion of strings greater then 512 MB. Add unit test for empty.
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
