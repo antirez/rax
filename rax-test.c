@@ -517,7 +517,6 @@ int iteratorUnitTests(void) {
     rax *t = raxNew();
     char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
 
-    srand(time(NULL));
     for (int x = 0; x < 10000; x++) rand();
 
     long items = 0;
