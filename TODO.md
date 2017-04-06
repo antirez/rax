@@ -15,8 +15,6 @@ ASAP
 Potential features to add in the future
 ===
 
-* Ability to store aux data of any size inside the node itself, instead of the
-  pointer. Could be done setting a special first byte in the value section
-  to represent an encoded and progressive data length. This could further
-  reduce the memory needs of a radix tree to represent a string `->` string map.
+* Take more state in the iterator so that we do not need to re-scan children in order to go to the next one. This may speedup iteration significantly at the cost of mroe complexity. However now we have enough fuzz and unit tests to spot potential bugs with great probability.
+* Ability to store aux data of any size inside the node itself, instead of the pointer. Could be done setting a special first byte in the value section to represent an encoded and progressive data length. This could further reduce the memory needs of a radix tree to represent a string `->` string map.
 * Rank operations. Only if opt-in during the Rax creation, otherwise no memory cost should be payed. If this feature gets added, to extract a random element we can just scan the radix tree for the N-th element after extracting a number N at random between zero and the number of elements minus one.
