@@ -610,6 +610,18 @@ int regtest1(void) {
     return 0;
 }
 
+/* Regression test #2: Crash when mixing NULL and not NULL values. */
+int regtest2(void) {
+    rax *rt = raxNew();
+    raxInsert(rt, (unsigned char *)"a", 1, (void *)(100), 0);
+    raxInsert(rt, (unsigned char *)"ab", 2, (void *)(101), 0);
+    raxInsert(rt, (unsigned char *)"abc", 3, (void *)(NULL), 0);
+    raxInsert(rt, (unsigned char *)"abcd", 4, (void *)(NULL), 0);
+    raxInsert(rt, (unsigned char *)"abc", 3, (void *)(102), 0);
+    raxFree(rt);
+    return 0;
+}
+
 void benchmark(void) {
     for (int mode = 0; mode < 2; mode++) {
         printf("Benchmark with %s keys:\n",
@@ -722,6 +734,7 @@ int main(int argc, char **argv) {
     if (do_regression) {
         printf("Performing regression tests: "); fflush(stdout);
         if (regtest1()) errors++;
+        if (regtest2()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
