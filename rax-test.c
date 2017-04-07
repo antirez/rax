@@ -510,6 +510,7 @@ int randomWalkTest(void) {
         return 1;
     }
     raxStop(&iter);
+    raxFree(t);
     return 0;
 }
 
