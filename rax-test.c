@@ -615,11 +615,22 @@ int regtest1(void) {
 /* Regression test #2: Crash when mixing NULL and not NULL values. */
 int regtest2(void) {
     rax *rt = raxNew();
-    raxInsert(rt, (unsigned char *)"a", 1, (void *)(100), 0);
-    raxInsert(rt, (unsigned char *)"ab", 2, (void *)(101), 0);
-    raxInsert(rt, (unsigned char *)"abc", 3, (void *)(NULL), 0);
-    raxInsert(rt, (unsigned char *)"abcd", 4, (void *)(NULL), 0);
-    raxInsert(rt, (unsigned char *)"abc", 3, (void *)(102), 0);
+    raxInsert(rt,(unsigned char *)"a",1,(void *)100,NULL);
+    raxInsert(rt,(unsigned char *)"ab",2,(void *)101,NULL);
+    raxInsert(rt,(unsigned char *)"abc",3,(void *)NULL,NULL);
+    raxInsert(rt,(unsigned char *)"abcd",4,(void *)NULL,NULL);
+    raxInsert(rt,(unsigned char *)"abc",3,(void *)102,NULL);
+    raxFree(rt);
+    return 0;
+}
+
+/* Regression test #3: Corruption in node child management.
+ * Always returns success but will trigger a Valgrind log. */
+int regtest3(void) {
+    rax *rt = raxNew();
+    raxInsert(rt, (unsigned char *)"D",1,(void*)1,NULL);
+    raxInsert(rt, (unsigned char *)"",0,NULL,NULL);
+    raxRemove(rt, (unsigned char *)"D",1,NULL);
     raxFree(rt);
     return 0;
 }
@@ -737,6 +748,7 @@ int main(int argc, char **argv) {
         printf("Performing regression tests: "); fflush(stdout);
         if (regtest1()) errors++;
         if (regtest2()) errors++;
+        if (regtest3()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
