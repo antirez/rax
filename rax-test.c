@@ -620,7 +620,6 @@ int regtest2(void) {
     raxInsert(rt, (unsigned char *)"abc", 3, (void *)(NULL), 0);
     raxInsert(rt, (unsigned char *)"abcd", 4, (void *)(NULL), 0);
     raxInsert(rt, (unsigned char *)"abc", 3, (void *)(102), 0);
-    raxShow(rt);
     raxFree(rt);
     return 0;
 }
