@@ -261,7 +261,9 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
         /* Insert element. */
         if ((double)rand()/RAND_MAX < addprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
-            void *val = (void*)(unsigned long)htHash(key,keylen);
+            void *val = (void*)(unsigned long)rand();
+            /* Stress NULL values more often, they use a special encoding. */
+            if (!(rand() % 100)) val = NULL;
             int retval1 = htAdd(ht,key,keylen,val);
             int retval2 = raxInsert(rax,key,keylen,val,NULL);
             if (retval1 != retval2) {
@@ -302,13 +304,12 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
 
     size_t numkeys = 0;
     while(raxNext(&iter)) {
-        void *expected = (void*)(unsigned long)htHash(iter.key,iter.key_len);
         void *val1 = htFind(ht,iter.key,iter.key_len);
         void *val2 = raxFind(rax,iter.key,iter.key_len);
-        if (val1 != val2 || val1 != expected) {
-            printf("Fuzz: HT=%p, RAX=%p, and expected=%p value do not match "
+        if (val1 != val2) {
+            printf("Fuzz: HT=%p, RAX=%p value do not match "
                    "for key %.*s\n",
-                    val1, val2, expected, (int)iter.key_len,(char*)iter.key);
+                    val1, val2, (int)iter.key_len,(char*)iter.key);
             return 1;
         }
         numkeys++;
@@ -619,6 +620,7 @@ int regtest2(void) {
     raxInsert(rt, (unsigned char *)"abc", 3, (void *)(NULL), 0);
     raxInsert(rt, (unsigned char *)"abcd", 4, (void *)(NULL), 0);
     raxInsert(rt, (unsigned char *)"abc", 3, (void *)(102), 0);
+    raxShow(rt);
     raxFree(rt);
     return 0;
 }
