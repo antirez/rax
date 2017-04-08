@@ -624,8 +624,12 @@ int regtest2(void) {
     return 0;
 }
 
-/* Regression test #3: Corruption in node child management.
- * Always returns success but will trigger a Valgrind log. */
+/* Regression test #3: Wrong access at node value in raxRemoveChild()
+ * when iskey == 1 and isnull == 1: the memmove() was performed including
+ * the value length regardless of the fact there was no actual value.
+ *
+ * Note that this test always returns success but will trigger a
+ * Valgrind error. */
 int regtest3(void) {
     rax *rt = raxNew();
     raxInsert(rt, (unsigned char *)"D",1,(void*)1,NULL);
