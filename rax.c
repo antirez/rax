@@ -131,7 +131,7 @@ static inline void raxStackFree(raxStack *ts) {
 }
 
 /* ----------------------------------------------------------------------------
- * Radis tree implementation
+ * Radix tree implementation
  * --------------------------------------------------------------------------*/
 
 /* Allocate a new non compressed node with the specified number of children.
