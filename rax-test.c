@@ -639,6 +639,33 @@ int regtest3(void) {
     return 0;
 }
 
+/* Regression test #4: Github issue #8, iterator does not populate the
+ * data field after seek in case of exact match. The test case is looks odd
+ * because it is quite indirect: Seeking "^" will result into seeking
+ * the element >= "", and since we just added "" an exact match happens,
+ * however we are using the original one from the bug report, since this
+ * is quite odd and may later protect against different bugs related to
+ * storing and fetching the empty string key. */
+int regtest4(void) {
+    rax *rt = raxNew();
+    raxIterator iter;
+    raxInsert(rt, (unsigned char*)"", 0, (void *)-1, NULL);
+    if (raxFind(rt, (unsigned char*)"", 0) != (void *)-1) {
+        printf("Regression test 4 failed. Key value mismatch in raxFind()\n");
+        return 1;
+    }
+    raxStart(&iter,rt);
+    raxSeek(&iter, "^", NULL, 0);
+    raxNext(&iter);
+    if (iter.data != (void *)-1) {
+        printf("Regression test 4 failed. Key value mismatch in raxNext()\n");
+        return 1;
+    }
+    raxStop(&iter);
+    raxFree(rt);
+    return 0;
+}
+
 void benchmark(void) {
     for (int mode = 0; mode < 2; mode++) {
         printf("Benchmark with %s keys:\n",
@@ -753,6 +780,7 @@ int main(int argc, char **argv) {
         if (regtest1()) errors++;
         if (regtest2()) errors++;
         if (regtest3()) errors++;
+        if (regtest4()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
