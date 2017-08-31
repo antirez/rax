@@ -1413,6 +1413,7 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
         it->node = it->rt->head;
         if (!raxSeekGreatest(it)) return 0;
         assert(it->node->iskey);
+        it->data = raxGetData(it->node);
         return 1;
     }
 
