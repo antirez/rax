@@ -275,6 +275,19 @@ The operators supported are `>`, `>=`, `<`, `<=`, `==`.
 The function returns 1 if the current iterator key satisfies the operator
 compared to the provided key, otherwise 0 is returned.
 
+## Checking for iterator EOF condition
+
+Sometimes we want to know if the itereator is in EOF state before calling
+raxNext() or raxPrev(). The iterator EOF condition happens when there are
+no more elements to return via raxNext() or raxPrev() call, because either
+raxSeek() failed to seek the requested element, or because EOF was reached
+while navigating the tree with raxPrev() and raxNext() calls.
+
+This condition can be tested with the following function that returns 1
+if EOF was reached:
+
+    int raxEOF(raxIterator *it);
+
 ## Modifying the radix tree while iterating
 
 In order to be efficient, the Rax iterator caches the exact node we are at,

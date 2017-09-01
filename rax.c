@@ -1646,6 +1646,14 @@ void raxStop(raxIterator *it) {
     raxStackFree(&it->stack);
 }
 
+/* Return if the iterator is in an EOF state. This happens when raxSeek()
+ * failed to seek an appropriate element, so that raxNext() or raxPrev()
+ * will return zero, or when an EOF condition was reached while iterating
+ * with raxNext() and raxPrev(). */
+int raxEOF(raxIterator *it) {
+    return it->flags & RAX_ITER_EOF;
+}
+
 /* ----------------------------- Introspection ------------------------------ */
 
 /* This function is mostly used for debugging and learning purposes.
