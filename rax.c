@@ -1188,10 +1188,6 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
     size_t orig_stack_items = it->stack.items;
     raxNode *orig_node = it->node;
 
-    /* Clear the EOF flag: it will be set again if the EOF condition
-     * is still valid. */
-    it->flags &= ~RAX_ITER_EOF;
-
     while(1) {
         int children = it->node->iscompr ? 1 : it->node->size;
         if (!noup && children) {
