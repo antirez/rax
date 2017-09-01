@@ -1501,6 +1501,7 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
                  * the previous sub-tree. */
                 if (nodechar < keychar) {
                     if (!raxSeekGreatest(it)) return 0;
+                    it->data = raxGetData(it->node);
                 } else {
                     if (!raxIteratorAddChars(it,it->node->data,it->node->size))
                         return 0;
