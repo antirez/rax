@@ -1176,7 +1176,7 @@ void raxIteratorDelChars(raxIterator *it, size_t count) {
  * The function returns 1 on success or 0 on out of memory. */
 int raxIteratorNextStep(raxIterator *it, int noup) {
     if (it->flags & RAX_ITER_EOF) {
-        return 0;
+        return 1;
     } else if (it->flags & RAX_ITER_JUST_SEEKED) {
         it->flags &= ~RAX_ITER_JUST_SEEKED;
         return 1;
@@ -1288,7 +1288,7 @@ int raxSeekGreatest(raxIterator *it) {
  * effect to the one of raxIteratorPrevSte(). */
 int raxIteratorPrevStep(raxIterator *it, int noup) {
     if (it->flags & RAX_ITER_EOF) {
-        return 0;
+        return 1;
     } else if (it->flags & RAX_ITER_JUST_SEEKED) {
         it->flags &= ~RAX_ITER_JUST_SEEKED;
         return 1;
