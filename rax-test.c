@@ -289,10 +289,10 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     }
 
     /* Check that count matches. */
-    if (ht->numele != rax->numele) {
+    if (ht->numele != raxSize(rax)) {
         printf("Fuzz: HT / RAX keys count mismatch: %lu vs %lu\n",
             (unsigned long) ht->numele,
-            (unsigned long) rax->numele);
+            (unsigned long) raxSize(rax));
         return 1;
     }
     printf("%lu elements inserted\n", (unsigned long)ht->numele);
@@ -400,7 +400,7 @@ int iteratorFuzzTest(int keymode, size_t count) {
             j++;
         }
     }
-    count = rax->numele;
+    count = raxSize(rax);
 
     /* Sort the array. */
     qsort(array,count,sizeof(arrayItem),compareArrayItems);
