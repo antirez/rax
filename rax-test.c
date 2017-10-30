@@ -666,6 +666,49 @@ int regtest4(void) {
     return 0;
 }
 
+/* Regression test #5: Valid comparison operators in the
+ * implementation of raxCompare are == => =< ?> ?< where
+ * ? can be any character. The documented operators are
+ * == <= >= < >.
+ */
+int regtest5(void) {
+    rax *t = raxNew();
+    raxInsert(rax,(unsigned char*)"a",1,(void*)(long)1,NULL);
+    raxInsert(rax,(unsigned char*)"b",1,(void*)(long)2,NULL);
+    raxInsert(rax,(unsigned char*)"c",1,(void*)(long)3,NULL);
+
+    raxIterator iter;
+    raxStart(&iter,t);
+    raxSeek(&iter,">=",(unsigned char*)"a",1);
+
+    while(raxNext(&iter)) {
+        if(raxCompare(&iter,">=",(unsigned char*)"a",1)) break;
+	return 1;
+    }
+
+    raxSeek(&iter,"<=",(unsigned char*)"c",1);
+    while(raxNext(&iter)) {
+        if(raxCompare(&iter,"<=",(unsigned char*)"c",1)) break;
+	return 1;
+    }
+
+    raxSeek(&iter,">",(unsigned char*)"a",1);
+    while(raxNext(&iter)) {
+        if(raxCompare(&iter,">",(unsigned char*)"a",1)) break;
+	return 1;
+    }
+
+    raxSeek(&iter,"<",(unsigned char*)"c",1);
+    while(raxNext(&iter)) {
+        if(raxCompare(&iter,"<",(unsigned char*)"c",1)) break;
+	return 1;
+    }
+
+    raxStop(&iter);
+    raxFree(t);
+    return 0;
+}
+
 void benchmark(void) {
     for (int mode = 0; mode < 2; mode++) {
         printf("Benchmark with %s keys:\n",
