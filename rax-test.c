@@ -36,6 +36,7 @@
 #include <assert.h>
 
 #include "rax.h"
+#include "rc4rand.h"
 
 /* ---------------------------------------------------------------------------
  * Simple hash table implementation, no rehashing, just chaining. This is
@@ -221,18 +222,18 @@ static size_t int2key(char *s, size_t maxlen, uint32_t i, int mode) {
         return int2alphakey(s,maxlen,i);
     } else if (mode == KEY_RANDOM) {
         if (maxlen > 16) maxlen = 16;
-        int r = rand() % maxlen;
-        for (int i = 0; i < r; i++) s[i] = rand()&0xff;
+        int r = rc4rand() % maxlen;
+        for (int i = 0; i < r; i++) s[i] = rc4rand()&0xff;
         return r;
     } else if (mode == KEY_RANDOM_ALPHA) {
         if (maxlen > 16) maxlen = 16;
-        int r = rand() % maxlen;
-        for (int i = 0; i < r; i++) s[i] = 'A'+rand()%('z'-'A'+1);
+        int r = rc4rand() % maxlen;
+        for (int i = 0; i < r; i++) s[i] = 'A'+rc4rand()%('z'-'A'+1);
         return r;
     } else if (mode == KEY_RANDOM_SMALL_CSET) {
         if (maxlen > 16) maxlen = 16;
-        int r = rand() % maxlen;
-        for (int i = 0; i < r; i++) s[i] = 'A'+rand()%4;
+        int r = rc4rand() % maxlen;
+        for (int i = 0; i < r; i++) s[i] = 'A'+rc4rand()%4;
         return r;
     } else if (mode == KEY_CHAIN) {
         if (i > maxlen) i = maxlen;
@@ -259,11 +260,11 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
         uint32_t keylen;
 
         /* Insert element. */
-        if ((double)rand()/RAND_MAX < addprob) {
+        if ((double)rc4rand()/RAND_MAX < addprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
-            void *val = (void*)(unsigned long)rand();
+            void *val = (void*)(unsigned long)rc4rand();
             /* Stress NULL values more often, they use a special encoding. */
-            if (!(rand() % 100)) val = NULL;
+            if (!(rc4rand() % 100)) val = NULL;
             int retval1 = htAdd(ht,key,keylen,val);
             int retval2 = raxInsert(rax,key,keylen,val,NULL);
             if (retval1 != retval2) {
@@ -273,7 +274,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
         }
 
         /* Remove element. */
-        if ((double)rand()/RAND_MAX < remprob) {
+        if ((double)rc4rand()/RAND_MAX < remprob) {
             keylen = int2key((char*)key,sizeof(key),i,keymode);
             int retval1 = htRem(ht,key,keylen);
             int retval2 = raxRemove(rax,key,keylen,NULL);
@@ -382,7 +383,7 @@ int arraySeek(arrayItem *array, int count, unsigned char *key, size_t len, char 
 }
 
 int iteratorFuzzTest(int keymode, size_t count) {
-    count = rand()%count;
+    count = rc4rand()%count;
     rax *rax = raxNew();
     arrayItem *array = malloc(sizeof(arrayItem)*count);
 
@@ -407,15 +408,15 @@ int iteratorFuzzTest(int keymode, size_t count) {
 
     /* Perform a random seek operation. */
     uint32_t keylen = int2key((char*)key,sizeof(key),
-        rand()%(count ? count : 1),keymode);
+        rc4rand()%(count ? count : 1),keymode);
     raxIterator iter;
     raxStart(&iter,rax);
     char *seekops[] = {"==",">=","<=",">","<","^","$"};
-    char *seekop = seekops[rand() % 7];
+    char *seekop = seekops[rc4rand() % 7];
     raxSeek(&iter,seekop,key,keylen);
     int seekidx = arraySeek(array,count,key,keylen,seekop);
 
-    int next = rand() % 2;
+    int next = rc4rand() % 2;
     int iteration = 0;
     while(1) {
         int rax_res;
@@ -520,7 +521,7 @@ int iteratorUnitTests(void) {
     rax *t = raxNew();
     char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
 
-    for (int x = 0; x < 10000; x++) rand();
+    for (int x = 0; x < 10000; x++) rc4rand();
 
     long items = 0;
     while(toadd[items] != NULL) items++;
@@ -740,7 +741,7 @@ void benchmark(void) {
         start = ustime();
         for (int i = 0; i < 5000000; i++) {
             char buf[64];
-            int r = rand() % 5000000;
+            int r = rc4rand() % 5000000;
             int len = int2key(buf,sizeof(buf),r,mode);
             void *data = raxFind(t,(unsigned char*)buf,len);
             if (data != (void*)(long)r) {
@@ -778,7 +779,7 @@ void benchmark(void) {
 }
 
 int main(int argc, char **argv) {
-    srand(1234);
+    rc4srand(1234);
 
     /* Tests to run by default are set here. */
     int do_benchmark = 0;
@@ -830,13 +831,13 @@ int main(int argc, char **argv) {
 
     if (do_fuzz) {
         for (int i = 0; i < 10; i++) {
-            double alpha = (double)rand() / RAND_MAX;
+            double alpha = (double)rc4rand() / RAND_MAX;
             double beta = 1-alpha;
-            if (fuzzTest(KEY_INT,rand()%10000,alpha,beta)) errors++;
-            if (fuzzTest(KEY_UNIQUE_ALPHA,rand()%10000,alpha,beta)) errors++;
-            if (fuzzTest(KEY_RANDOM,rand()%10000,alpha,beta)) errors++;
-            if (fuzzTest(KEY_RANDOM_ALPHA,rand()%10000,alpha,beta)) errors++;
-            if (fuzzTest(KEY_RANDOM_SMALL_CSET,rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_INT,rc4rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_UNIQUE_ALPHA,rc4rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM,rc4rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM_ALPHA,rc4rand()%10000,alpha,beta)) errors++;
+            if (fuzzTest(KEY_RANDOM_SMALL_CSET,rc4rand()%10000,alpha,beta)) errors++;
         }
 
         if (fuzzTest(KEY_INT,1000000,.7,.3)) errors++;
