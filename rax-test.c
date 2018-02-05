@@ -668,46 +668,30 @@ int regtest4(void) {
     return 0;
 }
 
-/* Regression test #5: Valid comparison operators in the
- * implementation of raxCompare are == => =< ?> ?< where
- * ? can be any character. The documented operators are
- * == <= >= < >.
- */
+/* Less than seek bug when stopping in the middle of a compressed node. */
 int regtest5(void) {
-    rax *rt = raxNew();
-    raxInsert(rt,(unsigned char*)"a",1,(void*)(long)1,NULL);
-    raxInsert(rt,(unsigned char*)"b",1,(void*)(long)2,NULL);
-    raxInsert(rt,(unsigned char*)"c",1,(void*)(long)3,NULL);
+    rax *rax = raxNew();
 
-    raxIterator iter;
-    raxStart(&iter,rt);
-    raxSeek(&iter,">=",(unsigned char*)"a",1);
+    raxInsert(rax,(unsigned char*)"b",1,(void*)(long)1,NULL);
+    raxInsert(rax,(unsigned char*)"ba",2,(void*)(long)2,NULL);
+    raxInsert(rax,(unsigned char*)"banana",6,(void*)(long)3,NULL);
 
-    while(raxNext(&iter)) {
-        if(raxCompare(&iter,">=",(unsigned char*)"a",1)) break;
-	return 1;
+    raxInsert(rax,(unsigned char*)"f",1,(void*)(long)4,NULL);
+    raxInsert(rax,(unsigned char*)"foobar",6,(void*)(long)5,NULL);
+    raxInsert(rax,(unsigned char*)"foobar123",9,(void*)(long)6,NULL);
+
+    raxIterator ri;
+    raxStart(&ri,rax);
+
+    raxSeek(&ri,"<",(unsigned char*)"foo",3);
+    raxNext(&ri);
+    if (ri.key_len != 1 || ri.key[0] != 'f') {
+        printf("Regression test 4 failed. Key value mismatch in raxNext()\n");
+        return 1;
     }
 
-    raxSeek(&iter,"<=",(unsigned char*)"c",1);
-    while(raxNext(&iter)) {
-        if(raxCompare(&iter,"<=",(unsigned char*)"c",1)) break;
-	return 1;
-    }
-
-    raxSeek(&iter,">",(unsigned char*)"a",1);
-    while(raxNext(&iter)) {
-        if(raxCompare(&iter,">",(unsigned char*)"a",1)) break;
-	return 1;
-    }
-
-    raxSeek(&iter,"<",(unsigned char*)"c",1);
-    while(raxNext(&iter)) {
-        if(raxCompare(&iter,"<",(unsigned char*)"c",1)) break;
-	return 1;
-    }
-
-    raxStop(&iter);
-    raxFree(rt);
+    raxStop(&ri);
+    raxFree(rax);
     return 0;
 }
 
@@ -826,6 +810,7 @@ int main(int argc, char **argv) {
         if (regtest2()) errors++;
         if (regtest3()) errors++;
         if (regtest4()) errors++;
+        if (regtest5()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
