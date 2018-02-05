@@ -359,7 +359,18 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
  * parent's node is returned as '*plink' if not NULL. Finally, if the
  * search stopped in a compressed node, '*splitpos' returns the index
  * inside the compressed node where the search ended. This is useful to
- * know where to split the node for insertion. */
+ * know where to split the node for insertion.
+ *
+ * Note that when we stop in the middle of a compressed node with
+ * a perfect match, this function will return a length equal to the
+ * 'len' argument (all the key matched), and will return a *splitpos which is
+ * always positive (that will represent the index of the character immediately
+ * *after* the last match in the current compressed node).
+ *
+ * When instead we stop at a compressed node and *splitpos is zero, it
+ * means that the current node represents the key (that is, none of the
+ * compressed node characters are needed to represent the key, just all
+ * its parents nodes). */
 static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode **stopnode, raxNode ***plink, int *splitpos, raxStack *ts) {
     raxNode *h = rax->head;
     raxNode **parentlink = &rax->head;
@@ -1523,11 +1534,26 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
             /* If there was no mismatch we are into a node representing the
              * key, (but which is not a key or the seek operator does not
              * include 'eq'), or we stopped in the middle of a compressed node
-             * after processing all the key. Cotinue iterating as this was
+             * after processing all the key. Continue iterating as this was
              * a legitimate key we stopped at. */
             it->flags &= ~RAX_ITER_JUST_SEEKED;
-            if (gt && !raxIteratorNextStep(it,0)) return 0;
-            if (lt && !raxIteratorPrevStep(it,0)) return 0;
+            if (it->node->iscompr && it->node->iskey && splitpos && lt) {
+                /* If we stopped in the middle of a compressed node with
+                 * perfect match, and the condition is to seek a key "<" than
+                 * the specified one, then if this node is a key it already
+                 * represents our match. For instance we may have nodes:
+                 *
+                 * "f" -> "oobar" = 1 -> "" = 2
+                 *
+                 * Representing keys "f" = 1, "foobar" = 2. A seek for
+                 * the key < "foo" will stop in the middle of the "oobar"
+                 * node, but will be our match, representing the key "f".
+                 *
+                 * So in that case, we don't seek backward. */
+            } else {
+                if (gt && !raxIteratorNextStep(it,0)) return 0;
+                if (lt && !raxIteratorPrevStep(it,0)) return 0;
+            }
             it->flags |= RAX_ITER_JUST_SEEKED; /* Ignore next call. */
         }
     } else {
