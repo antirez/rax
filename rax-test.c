@@ -832,13 +832,16 @@ int main(int argc, char **argv) {
         if (fuzzTest(KEY_RANDOM_SMALL_CSET,1000000,.7,.3)) errors++;
         if (fuzzTest(KEY_CHAIN,1000,.7,.3)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < 100000; i++) {
             if (iteratorFuzzTest(KEY_INT,100)) errors++;
             if (iteratorFuzzTest(KEY_UNIQUE_ALPHA,100)) errors++;
             if (iteratorFuzzTest(KEY_RANDOM_ALPHA,1000)) errors++;
             if (iteratorFuzzTest(KEY_RANDOM,1000)) errors++;
-            if (!(i % 50)) {
+            if (i && !(i % 100)) {
                 printf(".");
+                if (!(i % 1000)) {
+                    printf("%d%% done",i/1000);
+                }
                 fflush(stdout);
             }
         }
