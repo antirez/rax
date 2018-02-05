@@ -837,11 +837,16 @@ int main(int argc, char **argv) {
             if (fuzzTest(KEY_RANDOM_SMALL_CSET,rc4rand()%10000,alpha,beta)) errors++;
         }
 
-        if (fuzzTest(KEY_INT,1000000,.7,.3)) errors++;
-        if (fuzzTest(KEY_UNIQUE_ALPHA,1000000,.7,.3)) errors++;
-        if (fuzzTest(KEY_RANDOM,1000000,.7,.3)) errors++;
-        if (fuzzTest(KEY_RANDOM_ALPHA,1000000,.7,.3)) errors++;
-        if (fuzzTest(KEY_RANDOM_SMALL_CSET,1000000,.7,.3)) errors++;
+        size_t numops = 100000, cycles = 3;
+        while(cycles--) {
+            if (fuzzTest(KEY_INT,numops,.7,.3)) errors++;
+            if (fuzzTest(KEY_UNIQUE_ALPHA,numops,.7,.3)) errors++;
+            if (fuzzTest(KEY_RANDOM,numops,.7,.3)) errors++;
+            if (fuzzTest(KEY_RANDOM_ALPHA,numops,.7,.3)) errors++;
+            if (fuzzTest(KEY_RANDOM_SMALL_CSET,numops,.7,.3)) errors++;
+            numops *= 10;
+        }
+
         if (fuzzTest(KEY_CHAIN,1000,.7,.3)) errors++;
         printf("Iterator fuzz test: "); fflush(stdout);
         for (int i = 0; i < 100000; i++) {
