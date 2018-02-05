@@ -34,6 +34,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "rax.h"
 #include "rc4rand.h"
@@ -774,6 +775,38 @@ void benchmark(void) {
     }
 }
 
+/* Compressed nodes can only hold (2^29)-1 characters, so it is important
+ * to test for keys bigger than this amount, in order to make sure that
+ * the code to handle this edge case works as expected.
+ *
+ * This test is disabled by default because it uses a lot of memory. */
+int testHugeKey(void) {
+    size_t max_keylen = ((1<<29)-1) + 100;
+    unsigned char *key = malloc(max_keylen);
+    if (key == NULL) goto oom;
+
+    memset(key,'a',max_keylen);
+    key[10] = 'X';
+    key[max_keylen-1] = 'Y';
+    rax *rax = raxNew();
+    int retval = raxInsert(rax,(unsigned char*)"aaabbb",6,(void*)5678L,NULL);
+    if (retval == 0 && errno == ENOMEM) goto oom;
+    retval = raxInsert(rax,key,max_keylen,(void*)1234L,NULL);
+    if (retval == 0 && errno == ENOMEM) goto oom;
+    void *value1 = raxFind(rax,(unsigned char*)"aaabbb",6);
+    void *value2 = raxFind(rax,key,max_keylen);
+    if (value1 != (void*)5678L || value2 != (void*)1234L) {
+        printf("Huge key test failed\n");
+        return 1;
+    }
+    raxFree(rax);
+    return 0;
+
+oom:
+    fprintf(stderr,"Sorry, not enough memory to execute --hugekey test.");
+    exit(1);
+}
+
 int main(int argc, char **argv) {
     rc4srand(1234);
 
@@ -782,6 +815,7 @@ int main(int argc, char **argv) {
     int do_units = 1;
     int do_fuzz = 1;
     int do_regression = 1;
+    int do_hugekey = 0;
 
     /* If the user passed arguments, override the tests to run. */
     if (argc > 1) {
@@ -799,9 +833,16 @@ int main(int argc, char **argv) {
                 do_units = 1;
             } else if (!strcmp(argv[i],"--regression")) {
                 do_regression = 1;
+            } else if (!strcmp(argv[i],"--hugekey")) {
+                do_hugekey = 1;
             } else {
-                fprintf(stderr, "Usage: %s [--bench] [--fuzz] [--units] "
-                                "[--regression]\n", argv[0]);
+                fprintf(stderr, "Usage: %s <options>:\n"
+                                "          [--bench       (default off)]\n"
+                                "          [--fuzz]       (default on)\n"
+                                "          [--units]      (default on)\n"
+                                "          [--regression] (default on)\n"
+                                "          [--hugekey     (default off)]\n",
+                                argv[0]);
                 exit(1);
             }
         }
@@ -824,6 +865,11 @@ int main(int argc, char **argv) {
         if (regtest4()) errors++;
         if (regtest5()) errors++;
         if (errors == 0) printf("OK\n");
+    }
+
+    if (do_hugekey) {
+        printf("Performing huge key tests: "); fflush(stdout);
+        if (testHugeKey()) errors++;
     }
 
     if (do_fuzz) {
