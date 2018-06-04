@@ -600,6 +600,36 @@ int iteratorUnitTests(void) {
     return 0;
 }
 
+/* Test that raxInsert() / raxTryInsert() overwrite semantic
+ * works as expected. */
+int tryInsertUnitTests(void) {
+    rax *t = raxNew();
+    raxInsert(t,(unsigned char*)"FOO",3,(void*)(long)1,NULL);
+    void *old, *val;
+    raxTryInsert(t,(unsigned char*)"FOO",3,(void*)(long)2,&old);
+    if (old != (void*)(long)1) {
+        printf("Old value not returned correctly by raxTryInsert(): %p",
+            old);
+        return 1;
+    }
+
+    val = raxFind(t,(unsigned char*)"FOO",3);
+    if (val != (void*)(long)1) {
+        printf("FOO value mismatch: is %p intead of 1", val);
+        return 1;
+    }
+
+    raxInsert(t,(unsigned char*)"FOO",3,(void*)(long)2,NULL);
+    val = raxFind(t,(unsigned char*)"FOO",3);
+    if (val != (void*)(long)2) {
+        printf("FOO value mismatch: is %p intead of 2", val);
+        return 1;
+    }
+
+    raxFree(t);
+    return 0;
+}
+
 /* Regression test #1: Iterator wrong element returned after seek. */
 int regtest1(void) {
     rax *rax = raxNew();
@@ -854,6 +884,7 @@ int main(int argc, char **argv) {
         printf("Unit tests: "); fflush(stdout);
         if (randomWalkTest()) errors++;
         if (iteratorUnitTests()) errors++;
+        if (tryInsertUnitTests()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
