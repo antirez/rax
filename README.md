@@ -112,6 +112,17 @@ NULL as associated value.
 Note that keys are unsigned arrays of chars and you need to specify the
 length: Rax is binary safe, so the key can be anything.
 
+The insertion function is also available in a variant that will not
+overwrite the existing key value if any:
+
+    int raxTryInsert(rax *rax, unsigned char *s, size_t len, void *data,
+                     void **old);
+
+The function is exactly the same as raxInsert(), however if the key
+exists the function returns 0 (like raxInsert) without touching the
+old value. The old value can be still returned via the 'old' pointer
+by reference.
+
 ## Key lookup
 
 The lookup function is the following:
