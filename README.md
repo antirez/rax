@@ -45,7 +45,7 @@ Major features:
     + Testing relies a lot on fuzzing in order to explore non trivial states.
     + Implementation of the dictionary and iterator compared with behavior-equivalent implementations of simple hash tables and sorted arrays, generating random data and checking if the two implementations results match.
     + Out of memory condition tests. The implementation is fuzzed with a special allocator returning `NULL` at random. The resulting radix tree is tested for consistency. Redis, the primary target of this implementation, does not use this feature, but the ability to handle OOM may make this implementation useful where the ability to survive OOMs is needed.
-    + Soon to be part of Redis: the implementation will be stressed significantly in the real world.
+    + Part of Redis: the implementation is stressed significantly in the real world.
 
 The layout of a node is as follows. In the example, a node which represents
 a key (so has a data pointer associated), has three children `x`, `y`, `z`.
