@@ -107,16 +107,16 @@ typedef struct raxNode {
      * Note how the character is not stored in the children but in the
      * edge of the parents:
      *
-     * [header strlen=0][abc][a-ptr][b-ptr][c-ptr](value-ptr?)
+     * [header iscompr=0][abc][a-ptr][b-ptr][c-ptr](value-ptr?)
      *
-     * if node is compressed (strlen != 0) the node has 1 children.
+     * if node is compressed (iscompr bit is 1) the node has 1 children.
      * In that case the 'size' bytes of the string stored immediately at
      * the start of the data section, represent a sequence of successive
      * nodes linked one after the other, for which only the last one in
      * the sequence is actually represented as a node, and pointed to by
      * the current compressed node.
      *
-     * [header strlen=3][xyz][z-ptr](value-ptr?)
+     * [header iscompr=1][xyz][z-ptr](value-ptr?)
      *
      * Both compressed and not compressed nodes can represent a key
      * with associated data in the radix tree at any level (not just terminal
