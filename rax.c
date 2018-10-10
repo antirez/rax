@@ -1,6 +1,6 @@
 /* Rax -- A radix tree implementation.
  *
- * Copyright (c) 2017-2018, Salvatore Sanfilippo <antirez at gmail dot com>
+ * Copyright (c) 2017, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -467,7 +467,7 @@ int raxGenericInsert(rax *rax, unsigned char *s, size_t len, void *data, void **
     /* If the node we stopped at is a compressed node, we need to
      * split it before to continue.
      *
-     * Splitting a compressed node have a few possibile cases.
+     * Splitting a compressed node have a few possible cases.
      * Imagine that the node 'h' we are currently at is a compressed
      * node contaning the string "ANNIBALE" (it means that it represents
      * nodes A -> N -> N -> I -> B -> A -> L -> E with the only child
@@ -749,7 +749,7 @@ int raxGenericInsert(rax *rax, unsigned char *s, size_t len, void *data, void **
         cp = raxNodeLastChildPtr(trimmed);
         memcpy(cp,&postfix,sizeof(postfix));
 
-        /* Finish! We don't need to contine with the insertion
+        /* Finish! We don't need to continue with the insertion
          * algorithm for ALGO 2. The key is already inserted. */
         rax->numele++;
         rax_free(h);
@@ -1313,7 +1313,7 @@ int raxIteratorNextStep(raxIterator *it, int noup) {
     }
 }
 
-/* Seek the grestest key in the subtree at the current node. Return 0 on
+/* Seek the greatest key in the subtree at the current node. Return 0 on
  * out of memory, otherwise 1. This is an helper function for different
  * iteration functions below. */
 int raxSeekGreatest(raxIterator *it) {
