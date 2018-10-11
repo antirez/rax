@@ -169,7 +169,7 @@ static inline void raxStackFree(raxStack *ts) {
  * associated data pointer.
  * Returns the new node pointer. On out of memory NULL is returned. */
 raxNode *raxNewNode(size_t children, int datafield) {
-    size_t nodesize = sizeof(raxNode)+children+
+    size_t nodesize = sizeof(raxNode)+children+raxPadding(children)+
                       sizeof(raxNode*)*children;
     if (datafield) nodesize += sizeof(void*);
     raxNode *node = rax_malloc(nodesize);
@@ -361,7 +361,7 @@ raxNode *raxCompressNode(raxNode *n, unsigned char *s, size_t len, raxNode **chi
     if (*child == NULL) return NULL;
 
     /* Make space in the parent node. */
-    newsize = sizeof(raxNode)+len+sizeof(raxNode*);
+    newsize = sizeof(raxNode)+len+raxPadding(len)+sizeof(raxNode*);
     if (n->iskey) {
         data = raxGetData(n); /* To restore it later. */
         if (!n->isnull) newsize += sizeof(void*);
@@ -917,7 +917,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
         return parent;
     }
 
-    /* Otherwise we need to scan for the children pointer and memmove()
+    /* Otherwise we need to scan for the child pointer and memmove()
      * accordingly.
      *
      * 1. To start we seek the first element in both the children
@@ -942,13 +942,18 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     debugf("raxRemoveChild tail len: %d\n", taillen);
     memmove(e,e+1,taillen);
 
-    /* Since we have one data byte less, also child pointers start one byte
-     * before now. */
-    memmove(((char*)cp)-1,cp,(parent->size-taillen-1)*sizeof(raxNode**));
+    /* Compute the shift, that is the amount of bytes we should move our
+     * child pointers to the left, since the removal of one edge character
+     * and the corresponding padding change, may change the layout. */
+    size_t shift = (parent->size % sizeof(void*)) == 1 ? sizeof(void*) : 0;
 
-    /* Move the remaining "tail" pointer at the right position as well. */
+    /* Move the children pointers before the deletion point. */
+    if (shift)
+        memmove(((char*)cp)-shift,cp,(parent->size-taillen-1)*sizeof(raxNode**));
+
+    /* Move the remaining "tail" pointers at the right position as well. */
     size_t valuelen = (parent->iskey && !parent->isnull) ? sizeof(void*) : 0;
-    memmove(((char*)c)-1,c+1,taillen*sizeof(raxNode**)+valuelen);
+    memmove(((char*)c)-shift,c+1,taillen*sizeof(raxNode**)+valuelen);
 
     /* 4. Update size. */
     parent->size--;
@@ -1114,7 +1119,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
         if (nodes > 1) {
             /* If we can compress, create the new node and populate it. */
             size_t nodesize =
-                sizeof(raxNode)+comprsize+sizeof(raxNode*);
+                sizeof(raxNode)+comprsize+raxPadding(comprsize)+sizeof(raxNode*);
             raxNode *new = rax_malloc(nodesize);
             /* An out of memory here just means we cannot optimize this
              * node, but the tree is left in a consistent state. */
