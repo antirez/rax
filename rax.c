@@ -151,8 +151,8 @@ static inline void raxStackFree(raxStack *ts) {
 /* Return the pointer to the first child pointer. */
 #define raxNodeFirstChildPtr(n) ((raxNode**) ( \
     (n)->data + \
-    (n)->size) + \
-    raxPadding((n)->size))
+    (n)->size + \
+    raxPadding((n)->size)))
 
 /* Return the current total size of the node. Note that the second line
  * computes the padding after the string of characters, needed in order to
