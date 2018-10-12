@@ -51,8 +51,8 @@ void *raxNotFound = (void*)"rax-not-found-pointer";
 
 void raxDebugShowNode(const char *msg, raxNode *n);
 
-/* Turn debugging messages on/off. */
-#if 0
+/* Turn debugging messages on/off by compiling with RAX_DEBUG_MSG macro on. */
+#ifdef RAX_DEBUG_MSG
 #define debugf(...)                                                            \
     do {                                                                       \
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
