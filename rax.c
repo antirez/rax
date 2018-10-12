@@ -137,7 +137,7 @@ static inline void raxStackFree(raxStack *ts) {
 /* Return the padding needed in the characters section of a node having size
  * 'nodesize'. The padding is needed to store the child pointers to aligned
  * addresses. */
-#define raxPadding(nodesize) (sizeof(void*)-(nodesize % sizeof(void*)))
+#define raxPadding(nodesize) ((sizeof(void*)-(nodesize % sizeof(void*))) & (sizeof(void*)-1))
 
 /* Return the pointer to the last child pointer in a node. For the compressed
  * nodes this is the only child pointer. */
@@ -311,14 +311,6 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
           sizeof(raxNode*)*pos;
     memmove(src+shift+sizeof(raxNode*),src,sizeof(raxNode*)*(n->size-pos));
 
-    /* Now make the space for the additional char in the data section,
-     * but also move the pointers before the insertion point to the right
-     * by shift bytes, in order to obtain the following:
-     *
-     * [numc][ab x][ap][bp]....[xp]|auxp| */
-    src = n->data+pos;
-    memmove(src+1,src,n->size-pos);
-
     /* Move the pointers as well. Often we don't need to do anything if there
      * was already some padding to use. In that case the final destination of
      * the pointers will be the same, like in the example we made above. */
@@ -326,6 +318,14 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
         src = (unsigned char*) raxNodeFirstChildPtr(n);
         memmove(src+shift,src,sizeof(raxNode*)*pos);
     }
+
+    /* Now make the space for the additional char in the data section,
+     * but also move the pointers before the insertion point to the right
+     * by shift bytes, in order to obtain the following:
+     *
+     * [numc][ab x][ap][bp]....[xp]|auxp| */
+    src = n->data+pos;
+    memmove(src+1,src,n->size-pos);
 
     /* We can now set the character and its child node pointer to get:
      *
@@ -945,7 +945,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     /* Compute the shift, that is the amount of bytes we should move our
      * child pointers to the left, since the removal of one edge character
      * and the corresponding padding change, may change the layout. */
-    size_t shift = (parent->size % sizeof(void*)) == 0 ? sizeof(void*) : 0;
+    size_t shift = (parent->size % sizeof(void*)) == 1 ? sizeof(void*) : 0;
 
     /* Move the children pointers before the deletion point. */
     if (shift)
