@@ -1886,4 +1886,43 @@ void raxDebugShowNode(const char *msg, raxNode *n) {
     fflush(stdout);
 }
 
+/* Touch all the nodes of a tree returning a check sum. This is useful
+ * in order to make Valgrind detect if there is something wrong while
+ * reading the data structure.
+ *
+ * This function was used in order to identify Rax bugs after a big refactoring
+ * using this technique:
+ *
+ * 1. The rax-test is executed using Valgrind, adding a printf() so that for
+ *    the fuzz tester we see what iteration in the loop we are in.
+ * 2. After every modification of the radix tree made by the fuzz tester
+ *    in rax-test.c, we add a call to raxTouch().
+ * 3. Now as soon as an operation will corrupt the tree, raxTouch() will
+ *    detect it (via Valgrind) immediately. We can add more calls to narrow
+ *    the state.
+ * 4. At this point a good idea is to enable Rax debugging messages immediately
+ *    before the moment the tree is corrupted, to see what happens.
+ */
+unsigned long raxTouch(raxNode *n) {
+    debugf("Touching %p\n", (void*)n);
+    unsigned long sum = 0;
+    if (n->iskey) {
+        sum += (unsigned long)raxGetData(n);
+    }
 
+    int numchildren = n->iscompr ? 1 : n->size;
+    raxNode **cp = raxNodeFirstChildPtr(n);
+    int count = 0;
+    for (int i = 0; i < numchildren; i++) {
+        if (numchildren > 1) {
+            sum += (long)n->data[i];
+        }
+        raxNode *child;
+        memcpy(&child,cp,sizeof(child));
+        if (child == (void*)0x65d1760) count++;
+        if (count > 1) exit(1);
+        sum += raxTouch(child);
+        cp++;
+    }
+    return sum;
+}
