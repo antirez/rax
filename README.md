@@ -453,3 +453,36 @@ with `memcpy`, so it is not obvious where pointers are stored for Valgrind,
 that will detect the leaks. However, at the end of the test, Valgrind will
 detect that all the allocations were later freed, and will report that
 there are no leaks.
+
+# Debugging Rax
+
+While investigating problems in Rax it is possible to turn debugging messages
+on by compiling with the macro `RAX_DEBUG_MSG` enabled. Note that it's a lot
+of output, and may make running large tests too slow.
+
+In order to active debugging selectively in a dynamic way, it is possible to
+use the function raxSetDebugMsg(0) or raxSetDebugMsg(1) to disable/enable
+debugging.
+
+A problem when debugging code doing complex memory operations like a radix
+tree implemented the way Rax is implemented, is to understand where the bug
+happens (for instance a memory corruption). For that goal it is possible to
+use the function raxTouch() that will basically recursively access every
+node in the radix tree, itearting every sub child. In combination with
+tools like Valgrind, it is possible then to perform the following pattern
+in order to narrow down the state causing a give bug:
+
+1. The rax-test is executed using Valgrind, adding a printf() so that for
+   the fuzz tester we see what iteration in the loop we are in.
+2. After every modification of the radix tree made by the fuzz tester
+   in rax-test.c, we add a call to raxTouch().
+3. Now as soon as an operation will corrupt the tree, raxTouch() will
+   detect it (via Valgrind) immediately. We can add more calls to narrow
+   the state.
+4. At this point a good idea is to enable Rax debugging messages immediately
+   before the moment the tree is corrupted, to see what happens. This can
+   be achieved by adding a few "if" statements inside the code, since we
+   know the iteration that causes the corruption (because of step 1).
+
+This method was used with success during rafactorings in order to debug the
+introduced bugs.
