@@ -51,20 +51,34 @@ void *raxNotFound = (void*)"rax-not-found-pointer";
 
 void raxDebugShowNode(const char *msg, raxNode *n);
 
-/* Turn debugging messages on/off by compiling with RAX_DEBUG_MSG macro on. */
+/* Turn debugging messages on/off by compiling with RAX_DEBUG_MSG macro on.
+ * When RAX_DEBUG_MSG is defined by default Rax operations will emit a lot
+ * of debugging info to the standard output, however you can still turn
+ * debugging on/off in order to enable it only when you suspect there is an
+ * operation causing a bug using the function raxSetDebugMsg(). */
 #ifdef RAX_DEBUG_MSG
 #define debugf(...)                                                            \
-    do {                                                                       \
+    if (raxDebugMsg) {                                                         \
         printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
         printf(__VA_ARGS__);                                                   \
         fflush(stdout);                                                        \
-    } while (0);
+    }
 
 #define debugnode(msg,n) raxDebugShowNode(msg,n)
 #else
 #define debugf(...)
 #define debugnode(msg,n)
 #endif
+
+/* By default log debug info if RAX_DEBUG_MSG is defined. */
+static int raxDebugMsg = 1;
+
+/* When debug messages are enabled, turn them on/off dynamically. By
+ * default they are enabled. Set the state to 0 to disable, and 1 to
+ * re-enable. */
+void raxSetDebugMsg(int onoff) {
+    raxDebugMsg = onoff;
+}
 
 /* ------------------------- raxStack functions --------------------------
  * The raxStack is a simple stack of pointers that is capable of switching
@@ -1872,6 +1886,7 @@ void raxShow(rax *rax) {
 
 /* Used by debugnode() macro to show info about a given node. */
 void raxDebugShowNode(const char *msg, raxNode *n) {
+    if (raxDebugMsg == 0) return;
     printf("%s: %p [%.*s] key:%d size:%d children:",
         msg, (void*)n, (int)n->size, (char*)n->data, n->iskey, n->size);
     int numcld = n->iscompr ? 1 : n->size;
