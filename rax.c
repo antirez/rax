@@ -262,12 +262,30 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
      * pointer size, and the required node padding) bytes at the end, that is,
      * the additional char in the 'data' section, plus one pointer to the new
      * child, plus the padding needed in order to store addresses into aligned
-     * locations. The space after the "x" is padding.
+     * locations.
      *
-     * [numc][abx ][ap][bp][xp]|auxp|....
+     * So if we start with the following node, having "abde" edges.
+     *
+     * Note:
+     * - We assume 4 bytes pointer for simplicity.
+     * - Each space below corresponds to one byte
+     *
+     * [HDR*][abde][Aptr][Bptr][Dptr][Eptr]|AUXP|
+     *
+     * After the reallocation we need: 1 byte for the new edge character
+     * plus 4 bytes for a new child pointer (assuming 32 bit machine).
+     * However after adding 1 byte to the edge char, the header + the edge
+     * characters are no longer aligned, so we also need 3 bytes of padding.
+     * In total the reallocation will add 1+4+3 bytes = 8 bytes:
+     *
+     * (Blank bytes are represented by ".")
+     *
+     * [HDR*][abde][Aptr][Bptr][Dptr][Eptr]|AUXP|[....][....]
      *
      * Let's find where to insert the new child in order to make sure
-     * it is inserted in-place lexicographically. */
+     * it is inserted in-place lexicographically. Assuming we are adding
+     * a child "c" in our case pos will be = 2 after the end of the following
+     * loop. */
     int pos;
     for (pos = 0; pos < n->size; pos++) {
         if (n->data[pos] > c) break;
@@ -277,7 +295,8 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
      * so that we can mess with the other data without overwriting it.
      * We will obtain something like that:
      *
-     * [numc][abx ][ap][bp][xp]....|auxp| */
+     * [HDR*][abde][Aptr][Bptr][Dptr][Eptr][....][....]|AUXP|
+     */
     unsigned char *src, *dst;
     if (n->iskey && !n->isnull) {
         src = ((unsigned char*)n+curlen-sizeof(void*));
@@ -289,7 +308,7 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
      * pointers section forward because of the addition of the new child
      * byte in the string section. Note that if we had no padding, that
      * would be always "1", since we are adding a single byte in the string
-     * section of the node (where now there is "abx" basically).
+     * section of the node (where now there is "abde" basically).
      *
      * However we have padding, so it could be zero, or up to 8.
      *
@@ -298,23 +317,30 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
      * needed for the additional pointer itself. */
     size_t shift = newlen - curlen - sizeof(void*);
 
-    /* Now imagine we are adding a node with edge 'c'. The insertion
-     * point is between 'b' and 'x', so the 'pos' variable value is
+    /* We said we are adding a node with edge 'c'. The insertion
+     * point is between 'b' and 'd', so the 'pos' variable value is
      * the index of the first child pointer that we need to move forward
      * to make space for our new pointer.
      *
      * To start, move all the child pointers after the insertion point
      * of shift+sizeof(pointer) bytes on the right, to obtain:
      *
-     * [numc][abx ][ap][bp]....[xp]|auxp| */
+     * [HDR*][abde][Aptr][Bptr][....][....][Dptr][Eptr]|AUXP|
+     */
     src = n->data+n->size+
           raxPadding(n->size)+
           sizeof(raxNode*)*pos;
     memmove(src+shift+sizeof(raxNode*),src,sizeof(raxNode*)*(n->size-pos));
 
-    /* Move the pointers as well. Often we don't need to do anything if there
-     * was already some padding to use. In that case the final destination of
-     * the pointers will be the same, like in the example we made above. */
+    /* Move the pointers to the left of the insertion position as well. Often
+     * we don't need to do anything if there was already some padding to use. In
+     * that case the final destination of the pointers will be the same, however
+     * in our example there was no pre-existing padding, so we added one byte
+     * plus thre bytes of padding. After the next memmove() things will look
+     * like thata:
+     *
+     * [HDR*][abde][....][Aptr][Bptr][....][Dptr][Eptr]|AUXP|
+     */
     if (shift) {
         src = (unsigned char*) raxNodeFirstChildPtr(n);
         memmove(src+shift,src,sizeof(raxNode*)*pos);
@@ -324,14 +350,16 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
      * but also move the pointers before the insertion point to the right
      * by shift bytes, in order to obtain the following:
      *
-     * [numc][ab x][ap][bp]....[xp]|auxp| */
+     * [HDR*][ab.d][e...][Aptr][Bptr][....][Dptr][Eptr]|AUXP|
+     */
     src = n->data+pos;
     memmove(src+1,src,n->size-pos);
 
     /* We can now set the character and its child node pointer to get:
      *
-     * [numc][abcx][ap][bp][cp]....|auxp|
-     * [numc][abcx][ap][bp][cp][xp]|auxp| */
+     * [HDR*][abcd][e...][Aptr][Bptr][....][Dptr][Eptr]|AUXP|
+     * [HDR*][abcd][e...][Aptr][Bptr][Cptr][Dptr][Eptr]|AUXP|
+     */
     n->data[pos] = c;
     n->size++;
     src = (unsigned char*) raxNodeFirstChildPtr(n);
