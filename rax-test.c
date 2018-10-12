@@ -252,7 +252,7 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     hashtable *ht = htNew();
     rax *rax = raxNew();
 
-    printf("Fuzz test in mode %d: ", keymode);
+    printf("Fuzz test in mode %d [%zu]: ", keymode, count);
     fflush(stdout);
 
     /* Perform random operations on both the dictionaries. */
