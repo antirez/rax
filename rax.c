@@ -945,7 +945,7 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
     /* Compute the shift, that is the amount of bytes we should move our
      * child pointers to the left, since the removal of one edge character
      * and the corresponding padding change, may change the layout. */
-    size_t shift = (parent->size % sizeof(void*)) == 1 ? sizeof(void*) : 0;
+    size_t shift = (parent->size % sizeof(void*)) == 0 ? sizeof(void*) : 0;
 
     /* Move the children pointers before the deletion point. */
     if (shift)
