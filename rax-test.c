@@ -785,10 +785,20 @@ void benchmark(void) {
             buf[i%len] = '!'; /* "!" is never set into keys. */
             void *data = raxFind(t,(unsigned char*) buf,len);
             if (data != raxNotFound) {
-                printf("Failed lookup did not reported NOT FOUND!\n");
+                printf("** Failed lookup did not reported NOT FOUND!\n");
             }
         }
         printf("Failed lookup: %f\n", (double)(ustime()-start)/1000000);
+
+        start = ustime();
+        raxIterator ri;
+        raxStart(&ri,t);
+        raxSeek(&ri,"^",NULL,0);
+        int iter = 0;
+        while (raxNext(&ri)) iter++;
+        if (iter != 5000000) printf("** Warning iteration is incomplete\n");
+        raxStop(&ri);
+        printf("Full iteration: %f\n", (double)(ustime()-start)/1000000);
 
         start = ustime();
         for (int i = 0; i < 5000000; i++) {
