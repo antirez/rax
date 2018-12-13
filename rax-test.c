@@ -894,7 +894,7 @@ int main(int argc, char **argv) {
     /* Tests to run by default are set here. */
     int do_benchmark = 0;
     int do_units = 1;
-    int do_fuzz_cluster = 1;
+    int do_fuzz_cluster = 0;
     int do_fuzz = 1;
     int do_regression = 1;
     int do_hugekey = 0;
@@ -903,7 +903,6 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         do_benchmark = 0;
         do_units = 0;
-        do_fuzz_cluster = 0;
         do_fuzz = 0;
         do_regression = 0;
 
@@ -923,11 +922,13 @@ int main(int argc, char **argv) {
             } else {
                 fprintf(stderr, "Usage: %s <options>:\n"
                                 "          [--bench         (default off)]\n"
-                                "          [--fuzz-cluster] (default on)\n"
+                                "          [--fuzz-cluster] (default off)\n"
                                 "          [--fuzz]         (default on)\n"
                                 "          [--units]        (default on)\n"
                                 "          [--regression]   (default on)\n"
-                                "          [--hugekey       (default off)]\n",
+                                "          [--hugekey       (default off)]\n"
+                                "Without options all the default tests will\n"
+                                "be executed.\n",
                                 argv[0]);
                 exit(1);
             }
