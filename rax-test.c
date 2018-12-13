@@ -331,6 +331,47 @@ int fuzzTest(int keymode, size_t count, double addprob, double remprob) {
     return 0;
 }
 
+/* Redis Cluster alike fuzz testing.
+ *
+ * This test simulates the radix tree usage made by Redis Cluster in order
+ * to maintain the hash slot -> keys mappig. The keys are alphanumerical
+ * but the first two bytes that are binary (and are the key hashed).
+ *
+ * In this test there is no comparison with the hash table, the only goal
+ * is to crash the radix tree implementation, or to trigger Valgrind
+ * warnings. */
+int fuzzTestCluster(size_t count, double addprob, double remprob) {
+    unsigned char key[128];
+    int keylen = 0;
+
+    printf("Cluster Fuzz test [keys:%zu keylen:%d]: ", count, keylen);
+    fflush(stdout);
+
+    rax *rax = raxNew();
+    for (unsigned long j = 0; j < count; j++) {
+        /* Generate a random key. */
+        size_t id = rc4rand() % count;
+        keylen = snprintf((char*)key+2,sizeof(key)-2,"object:%zu",id);
+        uint32_t hash = id * 2654435761;
+        key[0] = hash & 0xff;
+        key[1] = (hash >> 8) & 0xff;
+        keylen += 2;
+
+        /* Insert element. */
+        if ((double)rc4rand()/RAND_MAX < addprob) {
+            raxInsert(rax,key,keylen,NULL,NULL);
+        }
+
+        /* Remove element. */
+        if ((double)rc4rand()/RAND_MAX < remprob) {
+            raxRemove(rax,key,keylen,NULL);
+        }
+    }
+    raxFree(rax);
+    printf("ok\n");
+    return 0;
+}
+
 /* Iterator fuzz testing. Compared the items returned by the Rax iterator with
  * a C implementation obtained by sorting the inserted strings in a linear
  * array. */
@@ -853,6 +894,7 @@ int main(int argc, char **argv) {
     /* Tests to run by default are set here. */
     int do_benchmark = 0;
     int do_units = 1;
+    int do_fuzz_cluster = 1;
     int do_fuzz = 1;
     int do_regression = 1;
     int do_hugekey = 0;
@@ -861,12 +903,15 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         do_benchmark = 0;
         do_units = 0;
+        do_fuzz_cluster = 0;
         do_fuzz = 0;
         do_regression = 0;
 
         for (int i = 1; i < argc; i++) {
             if (!strcmp(argv[i],"--bench")) {
                 do_benchmark = 1;
+            } else if (!strcmp(argv[i],"--fuzz-cluster")) {
+                do_fuzz_cluster = 1;
             } else if (!strcmp(argv[i],"--fuzz")) {
                 do_fuzz = 1;
             } else if (!strcmp(argv[i],"--units")) {
@@ -877,11 +922,12 @@ int main(int argc, char **argv) {
                 do_hugekey = 1;
             } else {
                 fprintf(stderr, "Usage: %s <options>:\n"
-                                "          [--bench       (default off)]\n"
-                                "          [--fuzz]       (default on)\n"
-                                "          [--units]      (default on)\n"
-                                "          [--regression] (default on)\n"
-                                "          [--hugekey     (default off)]\n",
+                                "          [--bench         (default off)]\n"
+                                "          [--fuzz-cluster] (default on)\n"
+                                "          [--fuzz]         (default on)\n"
+                                "          [--units]        (default on)\n"
+                                "          [--regression]   (default on)\n"
+                                "          [--hugekey       (default off)]\n",
                                 argv[0]);
                 exit(1);
             }
@@ -911,6 +957,14 @@ int main(int argc, char **argv) {
     if (do_hugekey) {
         printf("Performing huge key tests: "); fflush(stdout);
         if (testHugeKey()) errors++;
+    }
+
+    if (do_fuzz_cluster) {
+        for (int i = 0; i < 10; i++) {
+            double alpha = (double)rc4rand() / RAND_MAX;
+            double beta = 1-alpha;
+            if (fuzzTestCluster(rc4rand()%100000000,alpha,beta)) errors++;
+        }
     }
 
     if (do_fuzz) {
