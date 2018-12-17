@@ -39,6 +39,8 @@
 #include "rax.h"
 #include "rc4rand.h"
 
+uint16_t crc16(const char *buf, int len); /* From crc16.c */
+
 /* ---------------------------------------------------------------------------
  * Simple hash table implementation, no rehashing, just chaining. This is
  * used in order to test the radix tree implementation against something that
@@ -348,14 +350,30 @@ int fuzzTestCluster(size_t count, double addprob, double remprob) {
     fflush(stdout);
 
     rax *rax = raxNew();
+
+    /* This is our template to generate keys. The first two bytes will
+     * be replaced with the binary redis cluster hash slot. */
+    keylen = snprintf((char*)key,sizeof(key),"__geocode:2e68e5df3624");
+    char *cset = "0123456789abcdef";
+
     for (unsigned long j = 0; j < count; j++) {
-        /* Generate a random key. */
-        size_t id = rc4rand() % count;
-        keylen = snprintf((char*)key+2,sizeof(key)-2,"object:%zu",id);
-        uint32_t hash = id * 2654435761;
-        key[0] = hash & 0xff;
-        key[1] = (hash >> 8) & 0xff;
-        keylen += 2;
+        /* Generate a random key by altering our template key. */
+
+        /* With a given probability, let's use a common prefix so that there
+         * is a subset of keys that have an higher percentage of probability
+         * of being hit again and again. */
+        size_t commonprefix = rc4rand() & 0xf;
+        if (commonprefix == 0) memcpy(key+10,"2e68e5",6);
+
+        /* Alter a random char in the key. */
+        int pos = 10+rc4rand()%12;
+        key[pos] = cset[rc4rand()%16];
+
+        /* Compute the Redis Cluster hash slot to set the first two
+         * binary bytes of the key. */
+        int hashslot = crc16((char*)key,keylen) & 0x3FFF;
+        key[0] = (hashslot >> 8) & 0xff;
+        key[1] = hashslot & 0xff;
 
         /* Insert element. */
         if ((double)rc4rand()/RAND_MAX < addprob) {

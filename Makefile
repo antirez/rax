@@ -13,7 +13,7 @@ rax.o: rax.h
 rax-test.o: rax.h
 rax-oom-test.o: rax.h
 
-rax-test: rax-test.o rax.o rc4rand.o
+rax-test: rax-test.o rax.o rc4rand.o crc16.o
 	$(CC) -o $@ $^ $(LDFLAGS) $(DEBUG)
 
 rax-oom-test: rax-oom-test.o rax.o
