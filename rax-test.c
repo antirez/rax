@@ -385,8 +385,9 @@ int fuzzTestCluster(size_t count, double addprob, double remprob) {
             raxRemove(rax,key,keylen,NULL);
         }
     }
+    size_t finalkeys = raxSize(rax);
     raxFree(rax);
-    printf("ok\n");
+    printf("ok with %zu final keys\n",finalkeys);
     return 0;
 }
 
