@@ -2,7 +2,7 @@ ASAP
 ===
 
 * Write tests for raxCompare().
-* Test the insertion of strings greater then 512 MB. Add unit test for empty.
+* Test the insertion of strings greater than 512 MB. Add unit test for empty.
   string set/get and iteration.
 * Avoid fixing the parent link if the node is the same, if this makes a speed difference because of the avoided cache miss.
 * Check if reclaiming nodes from first to last child is a performance improvement in `radtreeFree()`.
