@@ -1941,3 +1941,23 @@ unsigned long raxTouch(raxNode *n) {
     }
     return sum;
 }
+
+/* Return the total heap size of the radix tree. */
+unsigned long raxHeapSize(rax *rax) {
+    return sizeof(*rax) + raxNodeHeapSize(rax->head);
+}
+
+/* Return the total heap size of this node and its children. */
+unsigned long raxNodeHeapSize(raxNode *n) {
+    unsigned long sum = raxNodeCurrentLength(n);
+    int numchildren = n->iscompr ? 1 : n->size;
+    raxNode **cp = raxNodeFirstChildPtr(n);
+
+    for (int i = 0; i < numchildren; i++) {
+        raxNode *child;
+        memcpy(&child,cp,sizeof(child));
+        sum += raxNodeHeapSize(child);
+        cp++;
+    }
+    return sum;
+}
