@@ -1073,12 +1073,12 @@ int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
 
             /* If after the removal the node has just a single child
              * and is not a key, we need to try to compress it. */
-            if (new->size == 1 && new->iskey == 0) {
+            if (new->size == 1) {
                 trycompress = 1;
                 h = new;
             }
         }
-    } else if (h->size == 1) {
+    } else if (h->size == 1 || h->iscompr) {
         /* If the node had just one child, after the removal of the key
          * further compression with adjacent nodes is pontentially possible. */
         trycompress = 1;
@@ -1142,7 +1142,7 @@ int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
         raxNode *parent;
         while(1) {
             parent = raxStackPop(&ts);
-            if (!parent || parent->iskey ||
+            if (!parent || h->iskey ||
                 (!parent->iscompr && parent->size != 1)) break;
             h = parent;
             debugnode("Going up to",h);
@@ -1165,7 +1165,8 @@ int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
         if (nodes > 1) {
             /* If we can compress, create the new node and populate it. */
             size_t nodesize =
-                sizeof(raxNode)+comprsize+raxPadding(comprsize)+sizeof(raxNode*);
+                sizeof(raxNode)+comprsize+raxPadding(comprsize)+sizeof(raxNode*)
+                +(start->iskey&&!start->isnull)*sizeof(void*);
             raxNode *new = rax_malloc(nodesize);
             /* An out of memory here just means we cannot optimize this
              * node, but the tree is left in a consistent state. */
@@ -1177,6 +1178,10 @@ int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
             new->isnull = 0;
             new->iscompr = 1;
             new->size = comprsize;
+            if(start->iskey){
+                void *data = raxGetData(start);
+                raxSetData(new,data);
+            }
             rax->numnodes++;
 
             /* Scan again, this time to populate the new node content and
