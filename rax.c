@@ -1,6 +1,8 @@
 /* Rax -- A radix tree implementation.
  *
- * Copyright (c) 2017-2018, Salvatore Sanfilippo <antirez at gmail dot com>
+ * Version 1.0 -- 14 November 2019
+ *
+ * Copyright (c) 2017-2019, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
