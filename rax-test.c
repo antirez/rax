@@ -798,6 +798,31 @@ int regtest5(void) {
     return 0;
 }
 
+/* Seek may not populate iterator data. See issue #25. */
+int regtest6(void) {
+    rax *rax = raxNew();
+
+    char *key1 = "172.17.141.2/adminguide/v5.0/";
+    char *key2 = "172.17.141.2/adminguide/v5.0/entitlements-configure.html";
+    char *seekpoint = "172.17.141.2/adminguide/v5.0/entitlements";
+
+    raxInsert(rax, (unsigned char*)key1,strlen(key1),(void*)(long)1234, NULL);
+    raxInsert(rax, (unsigned char*)key2,strlen(key2),(void*)(long)5678, NULL);
+
+    raxIterator ri;
+    raxStart(&ri,rax);
+    raxSeek(&ri,"<=", (unsigned char*)seekpoint, strlen(seekpoint));
+    raxPrev(&ri);
+    if ((long)ri.data != 1234) {
+        printf("Regression test 6 failed. Key data not populated.\n");
+        return 1;
+    }
+
+    raxStop(&ri);
+    raxFree(rax);
+    return 0;
+}
+
 void benchmark(void) {
     for (int mode = 0; mode < 2; mode++) {
         printf("Benchmark with %s keys:\n",
@@ -971,6 +996,7 @@ int main(int argc, char **argv) {
         if (regtest3()) errors++;
         if (regtest4()) errors++;
         if (regtest5()) errors++;
+        if (regtest6()) errors++;
         if (errors == 0) printf("OK\n");
     }
 
