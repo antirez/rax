@@ -1673,6 +1673,7 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
                  * node, but will be our match, representing the key "f".
                  *
                  * So in that case, we don't seek backward. */
+                it->data = raxGetData(it->node);
             } else {
                 if (gt && !raxIteratorNextStep(it,0)) return 0;
                 if (lt && !raxIteratorPrevStep(it,0)) return 0;
