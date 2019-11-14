@@ -1792,6 +1792,7 @@ int raxCompare(raxIterator *iter, const char *op, unsigned char *key, size_t key
         if (eq && key_len == iter->key_len) return 1;
         else if (lt) return iter->key_len < key_len;
         else if (gt) return iter->key_len > key_len;
+        else return 0; /* Avoid warning, just 'eq' is handled before. */
     } else if (cmp > 0) {
         return gt ? 1 : 0;
     } else /* (cmp < 0) */ {
