@@ -1,6 +1,6 @@
 /* Rax -- A radix tree implementation.
  *
- * Version 1.0 -- 14 November 2019
+ * Version 1.1 -- 3 December 2019
  *
  * Copyright (c) 2017-2019, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
@@ -1739,7 +1739,7 @@ int raxRandomWalk(raxIterator *it, size_t steps) {
     }
 
     if (steps == 0) {
-        size_t fle = floor(log(it->rt->numele));
+        size_t fle = 1+floor(log(it->rt->numele));
         fle *= 2;
         steps = 1 + rand() % fle;
     }
