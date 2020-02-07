@@ -1,6 +1,6 @@
 /* Rax -- A radix tree implementation.
  *
- * Version 1.1 -- 3 December 2019
+ * Version 1.2 -- 7 February 2019
  *
  * Copyright (c) 2017-2019, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
@@ -1768,6 +1768,7 @@ int raxRandomWalk(raxIterator *it, size_t steps) {
         if (n->iskey) steps--;
     }
     it->node = n;
+    it->data = raxGetData(it->node);
     return 1;
 }
 
