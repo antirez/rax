@@ -180,7 +180,7 @@ of 'seek', which is not 'seeked', in case you wonder) in order to start
 the iteration from the specified position. For this goal, the function
 `raxSeek` is used:
 
-    int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op);
+    int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len);
 
 For instance one may want to seek the first element greater or equal to the
 key `"foo"`:
@@ -340,7 +340,7 @@ not produce any result.
 The simplest way to continue the iteration, starting again from the last
 element returned by the iterator, is simply to seek itself:
 
-    raxSeek(&iter,iter.key,iter.key_len,"==");
+    raxSeek(&iter,"==",iter.key,iter.key_len);
 
 So for example in order to write a command that prints all the elements
 of a radix tree from the first to the last, and later again from the last
