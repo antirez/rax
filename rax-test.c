@@ -900,6 +900,44 @@ void benchmark(void) {
     }
 }
 
+/* Tests the heap size functions. */
+void heapsize(void) {
+
+    size_t sizes_null[14] = {32,56,120,176,216,256,296,360,408,456,504,568,568,568};
+    size_t sizes_ptr[14] = {32,64,136,200,248,296,344,416,472,528,584,656,664,672};
+    char *toadd[] = {"alligator","alien","baloon","chromodynamic","romane","romanus","romulus","rubens","ruber","rubicon","rubicundus","all","rub","ba",NULL};
+    size_t charlens[14] = {0};
+
+    long items = 0;
+    size_t charlen = 0;
+    while (toadd[items] != NULL) {
+        charlen += strlen(toadd[items]);
+        charlens[items] = charlen;
+        items++;
+    }
+
+    printf("%llu bytes total string length\n", (unsigned long long)charlen);
+
+    for (size_t ptr = 0; ptr <= 1; ptr++) {
+        for (long c = 0; c < items; c++) {
+            rax *t = raxNew();
+
+            for (long i = 0; i < c; i++)
+                raxInsert(t,(unsigned char*)toadd[i],strlen(toadd[i]),(void*)ptr,NULL);
+
+            size_t size = raxHeapSize(t);
+            size_t expected = ptr ? sizes_ptr[c] : sizes_null[c];
+            if (size != expected) {
+                printf("!!! expected size: %llu bytes, but got: %llu\n", (unsigned long long)expected, (unsigned long long)size);
+            }
+
+            printf("[%d]: %s items: %llu bytes\n", (int)c, (void*)ptr == NULL ? "-" : "*", (unsigned long long)size);
+
+            raxFree(t);
+        }
+    }
+}
+
 /* Compressed nodes can only hold (2^29)-1 characters, so it is important
  * to test for keys bigger than this amount, in order to make sure that
  * the code to handle this edge case works as expected.
@@ -942,6 +980,7 @@ int main(int argc, char **argv) {
     int do_fuzz = 1;
     int do_regression = 1;
     int do_hugekey = 0;
+    int do_heapsize = 0;
 
     /* If the user passed arguments, override the tests to run. */
     if (argc > 1) {
@@ -949,6 +988,7 @@ int main(int argc, char **argv) {
         do_units = 0;
         do_fuzz = 0;
         do_regression = 0;
+        do_heapsize = 0;
 
         for (int i = 1; i < argc; i++) {
             if (!strcmp(argv[i],"--bench")) {
@@ -963,6 +1003,8 @@ int main(int argc, char **argv) {
                 do_regression = 1;
             } else if (!strcmp(argv[i],"--hugekey")) {
                 do_hugekey = 1;
+            } else if (!strcmp(argv[i],"--heapsize")) {
+                do_heapsize = 1;
             } else {
                 fprintf(stderr, "Usage: %s <options>:\n"
                                 "          [--bench         (default off)]\n"
@@ -1054,6 +1096,10 @@ int main(int argc, char **argv) {
 
     if (do_benchmark) {
         benchmark();
+    }
+
+    if (do_heapsize) {
+        heapsize();
     }
 
     if (errors) {
