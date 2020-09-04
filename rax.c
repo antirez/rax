@@ -182,7 +182,7 @@ static inline void raxStackFree(raxStack *ts) {
 )
 
 /* Allocate a new non compressed node with the specified number of children.
- * If datafiled is true, the allocation is made large enough to hold the
+ * If datafield is true, the allocation is made large enough to hold the
  * associated data pointer.
  * Returns the new node pointer. On out of memory NULL is returned. */
 raxNode *raxNewNode(size_t children, int datafield) {
