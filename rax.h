@@ -80,7 +80,7 @@
  *                    /
  *                 (i o) "f"
  *                 /   \
- *    "firs"  ("rst")  (o) "fo"
+ *      "fi"  ("rst")  (o) "fo"
  *              /        \
  *    "first" []       [t   b] "foo"
  *                     /     \
