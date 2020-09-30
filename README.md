@@ -4,17 +4,17 @@ Rax is a radix tree implementation initially written to be used in a specific
 place of Redis in order to solve a performance problem, but immediately
 converted into a stand alone project to make it reusable for Redis itself, outside the initial intended application, and for other projects as well.
 
-The primary goal was to find a suitable balance between performances
+The primary goal was to find a suitable balance between performance
 and memory usage, while providing a fully featured implementation of radix trees
 that can cope with many different requirements.
 
 During the development of this library, while getting more and more excited
 about how practical and applicable radix trees are, I was very surprised to
-see how hard it is to write a robust implementation, especially of a fully
+see how hard it is to write a robust implementation, especially for a fully
 featured radix tree with a flexible iterator. A lot of things can go wrong
 in node splitting, merging, and various edge cases. For this reason a major
 goal of the project is to provide a stable and battle tested implementation
-for people to use and in order to share bug fixes. The project relies a lot
+for people to use and in order to share bug fixes. The project relies mainly
 on fuzz testing techniques in order to explore not just all the lines of code
 the project is composed of, but a large amount of possible states.
 
