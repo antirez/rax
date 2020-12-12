@@ -259,7 +259,7 @@ raxNode *raxAddChild(raxNode *n, unsigned char c, raxNode **childptr, raxNode **
     size_t curlen = raxNodeCurrentLength(n);
     n->size++;
     size_t newlen = raxNodeCurrentLength(n);
-    n->size--; /* For now restore the orignal size. We'll update it only on
+    n->size--; /* For now restore the original size. We'll update it only on
                   success at the end. */
 
     /* Alloc the new child we will link to 'n'. */
@@ -666,7 +666,7 @@ int raxGenericInsert(rax *rax, unsigned char *s, size_t len, void *data, void **
      *
      * 3. Trim the current node to contain the first $SPLITPOS characters.
      *    As usually if the new node length is just 1, set iscompr to 0.
-     *    Take the iskey / associated value as it was in the orignal node.
+     *    Take the iskey / associated value as it was in the original node.
      *    Fix the parent's reference.
      *
      * 4. Set the postfix node as the only child pointer of the trimmed
