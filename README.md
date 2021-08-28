@@ -486,3 +486,22 @@ in order to narrow down the state causing a give bug:
 
 This method was used with success during rafactorings in order to debug the
 introduced bugs.
+
+# Build with CMake
+
+As standalone project with tests
+```
+cmake . -Bbuild
+cmake --build build
+```
+
+As part of other project
+>Simply add the following lines into your top level CMakeLists.txt
+```
+add_subdirectory(<relative path to rax directory>)
+...
+target_link_libraries(<your target name>
+    PRIVATE
+        rax
+)
+```
