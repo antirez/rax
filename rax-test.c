@@ -823,7 +823,63 @@ int regtest6(void) {
     return 0;
 }
 
+void memrev64(void *p) {
+    unsigned char *x = p, t;
+
+    t = x[0];
+    x[0] = x[7];
+    x[7] = t;
+    t = x[1];
+    x[1] = x[6];
+    x[6] = t;
+    t = x[2];
+    x[2] = x[5];
+    x[5] = t;
+    t = x[3];
+    x[3] = x[4];
+    x[4] = t;
+}
+
 void benchmark(void) {
+    printf("Benchmark with 64 bit binary timer keys incremented by random offsets:\n");
+    int random_offset;
+    char* data = "foobar";
+    uint16_t max_offset[] = {100, 200, 300, 500, 800, 1300, 2100, 3400, 5500, 8900, 14400};
+    int ro_len = sizeof(max_offset) / sizeof(max_offset[0]);
+
+    for (int j = 0; j < ro_len ; j++) {
+        rax* timers = raxNew();
+        uint64_t start = ustime();
+        uint64_t tm = start;
+        uint64_t tmr = tm;
+
+        for (int i = 0; i < 5000000; i++) {
+            if (BYTE_ORDER == LITTLE_ENDIAN) memrev64(&tmr);
+            raxInsert(timers, (uint8_t*)&tmr, 8, data, NULL);
+            random_offset = max_offset[j] == 0 ? 0 : rc4rand() % max_offset[j];
+            tm = tm + random_offset + 1;
+            tmr = tm;
+        }
+
+        uint64_t interval_secs = (tm - start) / 1000000;
+        printf("Max random offset between timer entries: %d µsec\n", max_offset[j]);
+        printf("Total interval for timer entries:  %f hours\n", (double)interval_secs / (60 * 60));
+        printf("Insert: %f secs\n", (double)(ustime() - start) / 1000000);
+        printf("%llu total nodes\n", (uint64_t)timers->numnodes);
+        printf("%llu total elements\n", (uint64_t)timers->numele);
+
+        start = ustime();
+        raxIterator ti;
+        raxStart(&ti, timers);
+        raxSeek(&ti, "^", NULL, 0);
+        int iter = 0;
+        while (raxNext(&ti)) iter++;
+        if (iter != 5000000) printf("** Warning iteration is incomplete\n");
+        printf("Full iteration: %f\n\n", (double)(ustime() - start) / 1000000);
+        raxStop(&ti);
+        raxFree(timers);
+    }
+
     for (int mode = 0; mode < 2; mode++) {
         printf("Benchmark with %s keys:\n",
             (mode == 0) ? "integer" : "alphanumerical");
