@@ -166,6 +166,7 @@ typedef int (*raxNodeCallback)(raxNode **noderef);
 
 /* Radix tree iterator state is encapsulated into this data structure. */
 #define RAX_ITER_STATIC_LEN 128
+#define RAX_ITER_CHILD_STATIC_LEN 32
 #define RAX_ITER_JUST_SEEKED (1<<0) /* Iterator was just seeked. Return current
                                        element for the first iteration and
                                        clear the flag. */
@@ -182,6 +183,11 @@ typedef struct raxIterator {
     unsigned char key_static_string[RAX_ITER_STATIC_LEN];
     raxNode *node;          /* Current node. Only for unsafe iteration. */
     raxStack stack;         /* Stack used for unsafe iteration. */
+    size_t child_offset;    /* current child offset */
+    size_t cpos_max;        /* max number of child offsets the current stack can hold */
+    size_t cpos;            /* current position in the stack of child offsets */
+    uint8_t *child_offset_stack; /* stack (vector) of child offsets */
+    uint8_t child_offset_stack_static[RAX_ITER_CHILD_STATIC_LEN];
     raxNodeCallback node_cb; /* Optional node callback. Normally set to NULL. */
 } raxIterator;
 
