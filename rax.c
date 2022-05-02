@@ -1590,6 +1590,8 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
     it->stack.items = 0; /* Just resetting. Intialized by raxStart(). */
+    it->child_offset = 0;
+    it->cpos = 0;
     it->flags |= RAX_ITER_JUST_SEEKED;
     it->flags &= ~RAX_ITER_EOF;
     it->key_len = 0;
