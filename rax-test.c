@@ -823,23 +823,6 @@ int regtest6(void) {
     return 0;
 }
 
-void memrev64(void *p) {
-    unsigned char *x = p, t;
-
-    t = x[0];
-    x[0] = x[7];
-    x[7] = t;
-    t = x[1];
-    x[1] = x[6];
-    x[6] = t;
-    t = x[2];
-    x[2] = x[5];
-    x[5] = t;
-    t = x[3];
-    x[3] = x[4];
-    x[4] = t;
-}
-
 void benchmark(void) {
     printf("Benchmark with 64 bit binary timer keys incremented by random offsets:\n");
     int random_offset;
@@ -851,14 +834,13 @@ void benchmark(void) {
         rax* timers = raxNew();
         uint64_t start = ustime();
         uint64_t tm = start;
-        uint64_t tmr = tm;
+        uint8_t tmv[8];
 
         for (int i = 0; i < 5000000; i++) {
-            if (BYTE_ORDER == LITTLE_ENDIAN) memrev64(&tmr);
-            raxInsert(timers, (uint8_t*)&tmr, 8, data, NULL);
+            for (int k = 0; k < 8; k++) tmv[k] = tm >> ((7 - k) * 8) & 0xff;
+            raxInsert(timers, tmv, 8, data, NULL); /* big endian (network order) */
             random_offset = max_offset[j] == 0 ? 0 : rc4rand() % max_offset[j];
             tm = tm + random_offset + 1;
-            tmr = tm;
         }
 
         uint64_t interval_secs = (tm - start) / 1000000;
