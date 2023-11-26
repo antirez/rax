@@ -180,7 +180,7 @@ of 'seek', which is not 'seeked', in case you wonder) in order to start
 the iteration from the specified position. For this goal, the function
 `raxSeek` is used:
 
-    int raxSeek(raxIterator *it, unsigned char *ele, size_t len, const char *op);
+    int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len);
 
 For instance one may want to seek the first element greater or equal to the
 key `"foo"`:
@@ -189,7 +189,7 @@ key `"foo"`:
 
 The function raxSeek() returns 1 on success, or 0 on failure. Possible failures are:
 
-1. An invalid operator was passed as last argument.
+1. An invalid operator was passed as second argument.
 2. An out of memory condition happened while seeking the iterator.
 
 Once the iterator is sought, it is possible to iterate using the function
